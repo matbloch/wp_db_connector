@@ -1,136 +1,109 @@
 <?php
 
+abstract class Utils{
 
-/**
- * Used to define table properties
- *
- * Class DBTable
- * @package wpdc
- */
-abstract class DBTable{
+    /* data binding and action queuing */
+    private $bound_callbacks;   // queued action callbacks (definition in class extension through definition method)
 
-    protected $db_table_name;            // holds the db values of the object
-    protected $db_primary_key;
-    protected $db_format;      // defines the value format
-    protected $db_readonly;    // defines the read-only fields
+    // stores error messages when a member method returns false
+    private $errors;
 
-    // input validation
-    protected $validation_rules;            // define the validation rules for all fields (no required fields)
-    protected $required_fields;
-    protected $unique_keys;   // todo: implement unique key pairs
-
-    // force definition of object properties
-    abstract protected function define_db_table_name();
-    abstract protected function define_db_primary_key();
-    abstract protected function define_db_format();
-    abstract protected function define_db_readonly();
-
-    // input validation
-    abstract protected function define_validation_rules();
+    /* databinding/functionbinding (permanent, binding evaluated at instance creation) */
 
     /**
-     * @return array, format: array('{context}'=>array({fieldnames}))
+     * Used for data binding. The currently available data is passed to the callback function and the return is saved back.
+     * To abort the parent function, set $eval_return to true and return false/0 in the bound method
+     * @param string $context string context where the queued functions are executed
+     * @param string $callback name of the callback function (extended class method) as string
+     * @param bool $eval_return if set to true, the parent function returns 0/false if return is 0/false
+     * @param int $order relative order the function is executed
      */
-    protected function define_required_fields(){
-        return array();
-    }
 
-    /** Unique field values: crucial for insert/update
-     * @return array
-     */
-    protected function define_unique_keys(){
-        return array();
-    }
-
-    public function __construct()
-    {
-        // load settings from forced parent setters into properties
-        $this->load_settings();
-    }
-
-    // getters
-    public function get_db_table_name(){
-        return $this->db_table_name;
-    }
-    public function get_db_primary_key(){
-        return $this->db_primary_key;
-    }
-    public function get_db_format($col_name = NULL){
-
-        if($col_name !== NULL && is_string($col_name)){
-            if(isset($this->db_format[$col_name])){
-                return $this->db_format[$col_name];
+    protected function bind_action($context, $callback, $eval_return = false, $order = 0){
+        if(method_exists ( $this ,  $callback )){
+            if($order == 0){
+                $this->bound_callbacks[$context][] = array($callback, $eval_return);
+            }else{
+                while(!empty($this->bound_callbacks[$context][$order])){
+                    $order++;
+                }
+                $this->bound_callbacks[$context][$order] = array($callback, $eval_return);
             }
-            return '';
         }
-
-        return $this->db_format;
-    }
-    public function get_db_readonly(){
-        return $this->db_readonly;
-    }
-    public function get_unique_keys(){
-        return $this->unique_keys;
-    }
-    public function get_validation_rules(){
-        return $this->validation_rules;
     }
 
-    // save return value of forced settings functions to object
-    protected function load_settings(){
+    /**
+     * @param string $context Context the bound actions to execute
+     * @param mixed $input Contextual argument of the parent function
+     * @return bool Returns false to force parent function to quit
+     */
+    protected function execute_bound_actions($context, &$input){
+        if(!empty($this->bound_callbacks[$context])){
+            krsort($this->bound_callbacks[$context]);
+            foreach($this->bound_callbacks[$context] as $cb){
+                $result = call_user_func( array($this,$cb), $input );
 
-        // load the settings into the object
-        $this->db_primary_key = $this->define_db_primary_key();
-        $this->db_table_name = $this->define_db_table_name();
-        $this->db_format = $this->define_db_format();
-        $this->db_readonly = $this->define_db_readonly();
-
-        // validation
-        $this->validation_rules = $this->define_validation_rules();
-        $this->required_fields = $this->define_required_fields();
-        $this->unique_keys = $this->define_unique_keys();
-    }
-
-    public function validate(array $fields, $context = 'std', $disp_error = false){
-
-        // TODO: context and manual validation (db table defined)
-
-        // check required fields
-        if(!empty($this->required_fields[$context])){
-            // get in this context required fields
-            $req_fields = array_filter(array_intersect_key($fields, array_flip($this->required_fields[$context])));
-            if(empty($req_fields)){
-                return false;
+                // if the function returns something - save to the input
+                if(!is_null($result)){
+                    // force parent function to return false
+                    if($result === false){
+                        $this->add_emsg($context, 'The bound function "'.$cb.'" returned false.');
+                        return false;
+                    }else{
+                        $input = $result;
+                    }
+                }
             }
         }
 
-        // check value format
-        $gump = new \GUMP();
-        $gump->validation_rules($this->get_validation_rules());
+        // stay in parent function
+        return true;
 
-        $fields = $gump->sanitize($fields);
-        $validated = $gump->run($fields);
+    }
 
-        if($validated === false) {
-            if($disp_error){echo $gump->get_readable_errors(true);}
-            return false;
+
+    /* error handling */
+    public function add_emsg($context, $msg){
+        $this->errors[$context][] = $msg;
+    }
+    public function reset_emsg($context = array()){
+        if(empty($context)){
+            $this->errors = array();
+        }else{
+            foreach($context as $c){
+                if(!empty($this->errors[$c])){
+                    $this->errors[$c] = array();
+                }
+            }
+        }
+    }
+    public function get_emsg($context = ''){
+        if($context == ''){
+            $e = $this->errors;
+        }else{
+            $e = (empty($this->errors[$context])?array():$this->errors[$context]);
         }
 
-        return $validated;
-
+        //$this->reset_error_msgs($context);
+        return $e;
     }
 
 }
 
-abstract class DBObjectInterface{
+
+abstract class DBObjectInterface extends Utils{
 
     // holds the db values of the object
     private $properties;
     public $table; // db setup of type DBTable, inherit public access
-    private $action_callbacks;   // queued action callbacks
 
     // set the db table
     abstract protected function define_db_table();
+
+    public function define_data_binding(){
+        // placeholder function
+        // use bind_action here to define the data binding
+    }
 
     public function __construct()
     {
@@ -141,8 +114,14 @@ abstract class DBObjectInterface{
             throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
         }
 
+        // define the corresponding table
         $this->table = $this->define_db_table();
 
+        // define the data binding
+        $this->define_data_binding();
+
+        // reset errors messages
+        $this->errors = new ErrorHandler();
 
         /*
         // parse field values
@@ -357,6 +336,9 @@ abstract class DBObjectInterface{
      */
     public function delete(){
 
+        // reset error messages
+        $this->reset_emsg(array('delete', 'delete_before', 'delete_after'));
+
         // TODO: make independent from load
         $this->loaded();
 
@@ -389,20 +371,18 @@ abstract class DBObjectInterface{
     }
 
     /**
-     * @param array $data
-     * @return bool
+     * @param array $data Data format: array of 'col_name' => 'col_value' tuples
+     * @return mixed False: Entry could not be inserted, 1: Successfully inserted
      */
     public function insert(array $data){
 
-        try{
-            $this->execute_action_callbacks('insert_before');
-        }catch (\Exception $e){
-            return false;
-        }
+        // reset error messages
+        $this->reset_emsg(array('insert', 'insert_before', 'insert_after'));
 
         // validate input arguments
         $data = $this->table->validate($data, 'insert');
         if($data === false){
+            $this->add_emsg('insert', 'The input data valitaion failed.');
             return false;
         }
 
@@ -412,14 +392,13 @@ abstract class DBObjectInterface{
         ksort($value_format);
         ksort($values);
 
-        // before insert
-        if(($res = $this->insert_before($values, $value_format)) !== true){
-            return $res;
-        }
+        // === data binding
+        $exec = $this->execute_bound_actions('insert_before', $values);
+        if($exec === false){return false;};
 
         global $wpdb;
 
-        // check if entries with same unique key values exist
+        // check if entries with same unique key (apart from the primary keys) values exist
         $unique = $this->table->get_unique_keys();
         if(!empty($unique)){
 
@@ -437,6 +416,7 @@ abstract class DBObjectInterface{
 
             // return if results with same unique key values were found
             if(!empty($res)){
+                $this->add_error_msg('insert', 'An entry with the same unique keys already exists.');
                 return false;
             }
         }
@@ -448,52 +428,22 @@ abstract class DBObjectInterface{
         );
 
         if($result == 1){
-            // load inserted data
+            // load inserted data - todo: dont perform another SQL query
             $this->load(array($this->table->get_db_primary_key() => $wpdb->insert_id));
         }
 
-        try{
-            $this->execute_action_callbacks('insert_after');
-        }catch (\Exception $e){
-            return false;
-        }
+        // === data binding
+        $exec = $this->execute_bound_actions('insert_after', $result);
+        if($exec === false){return false;};
 
         return $result;
 
     }
 
-    /* data binding placeholders */
-
-    private function execute_action_callbacks($action){
-        if(!empty($this->action_callbacks[$action])){
-            krsort($this->action_callbacks[$action]);
-            foreach($this->action_callbacks[$action] as $cb){
-                call_user_func( array($this,$cb) );
-            }
-        }
-    }
-
-    public function queue_action($action, $callback, $order = 0){
-        if(method_exists ( $this ,  $callback )){
-            if($order == 0){
-                $this->action_callbacks['action'][] = $callback;
-            }else{
-                while(!empty($this->action_callbacks['action'][$order])){
-                    $order++;
-                }
-                $this->action_callbacks['action'][$order] = $callback;
-            }
-        }
-    }
-
-    public function insert_before($values, $value_format){
-        return true;
-    }
-
 }
 
 
-abstract class DBObjectsHandler{
+abstract class DBObjectsHandler extends Utils{
 
     private $and;       // the common search property
     private $or;        // the common search property
@@ -809,5 +759,125 @@ abstract class DBObjectsHandler{
 }
 
 
+/**
+ * Used to define table properties
+ *
+ * Class DBTable
+ * @package wpdc
+ */
+abstract class DBTable{
+
+    protected $db_table_name;            // holds the db values of the object
+    protected $db_primary_key;
+    protected $db_format;      // defines the value format
+    protected $db_readonly;    // defines the read-only fields
+
+    // input validation
+    protected $validation_rules;            // define the validation rules for all fields (no required fields)
+    protected $required_fields;
+    protected $unique_keys;   // todo: implement unique key pairs
+
+    // force definition of object properties
+    abstract protected function define_db_table_name();
+    abstract protected function define_db_primary_key();
+    abstract protected function define_db_format();
+    abstract protected function define_db_readonly();
+
+    // input validation
+    abstract protected function define_validation_rules();
+
+    /**
+     * @return array, format: array('{context}'=>array({fieldnames}))
+     */
+    protected function define_required_fields(){
+        return array();
+    }
+
+    /** Unique field values: crucial for insert/update
+     * @return array
+     */
+    protected function define_unique_keys(){
+        return array();
+    }
+
+    public function __construct()
+    {
+        // load settings from forced parent setters into properties
+        $this->load_settings();
+    }
+
+    // getters
+    public function get_db_table_name(){
+        return $this->db_table_name;
+    }
+    public function get_db_primary_key(){
+        return $this->db_primary_key;
+    }
+    public function get_db_format($col_name = NULL){
+
+        if($col_name !== NULL && is_string($col_name)){
+            if(isset($this->db_format[$col_name])){
+                return $this->db_format[$col_name];
+            }
+            return '';
+        }
+
+        return $this->db_format;
+    }
+    public function get_db_readonly(){
+        return $this->db_readonly;
+    }
+    public function get_unique_keys(){
+        return $this->unique_keys;
+    }
+    public function get_validation_rules(){
+        return $this->validation_rules;
+    }
+
+    // save return value of forced settings functions to object
+    protected function load_settings(){
+
+        // load the settings into the object
+        $this->db_primary_key = $this->define_db_primary_key();
+        $this->db_table_name = $this->define_db_table_name();
+        $this->db_format = $this->define_db_format();
+        $this->db_readonly = $this->define_db_readonly();
+
+        // validation
+        $this->validation_rules = $this->define_validation_rules();
+        $this->required_fields = $this->define_required_fields();
+        $this->unique_keys = $this->define_unique_keys();
+    }
+
+    public function validate(array $fields, $context = 'std', $disp_error = false){
+
+        // TODO: context and manual validation (db table defined)
+
+        // check required fields
+        if(!empty($this->required_fields[$context])){
+            // get in this context required fields
+            $req_fields = array_filter(array_intersect_key($fields, array_flip($this->required_fields[$context])));
+            if(empty($req_fields)){
+                return false;
+            }
+        }
+
+        // check value format
+        $gump = new \GUMP();
+        $gump->validation_rules($this->get_validation_rules());
+
+        $fields = $gump->sanitize($fields);
+        $validated = $gump->run($fields);
+
+        if($validated === false) {
+            if($disp_error){echo $gump->get_readable_errors(true);}
+            return false;
+        }
+
+        return $validated;
+
+    }
+
+}
 
 ?>

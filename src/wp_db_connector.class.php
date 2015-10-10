@@ -374,7 +374,7 @@ abstract class DBObjectInterface extends Utils{
      * @param array $data Data format: array of 'col_name' => 'col_value' tuples
      * @return mixed False: Entry could not be inserted, 1: Successfully inserted
      */
-    public function insert(array $data){
+    public function insert(array $data, $force_reload = true){
 
         // reset error messages
         $this->reset_emsg(array('insert', 'insert_before', 'insert_after'));
@@ -427,8 +427,8 @@ abstract class DBObjectInterface extends Utils{
             $value_format
         );
 
-        if($result == 1){
-            // load inserted data - todo: dont perform another SQL query
+        if($result == 1 && $force_reload == true){
+            // reload inserted data. Necessary for default fields
             $this->load(array($this->table->get_db_primary_key() => $wpdb->insert_id));
         }
 
@@ -779,7 +779,7 @@ abstract class DBTable{
 
     // force definition of object properties
     abstract protected function define_db_table_name();
-    abstract protected function define_db_primary_key();
+    abstract protected function define_db_primary_key();    // string, single value
     abstract protected function define_db_format();
     abstract protected function define_db_readonly();
 
@@ -838,7 +838,11 @@ abstract class DBTable{
     protected function load_settings(){
 
         // load the settings into the object
+
         $this->db_primary_key = $this->define_db_primary_key();
+        if(!is_string($this->db_primary_key))
+            throw new Exception('Division durch Null.');
+
         $this->db_table_name = $this->define_db_table_name();
         $this->db_format = $this->define_db_format();
         $this->db_readonly = $this->define_db_readonly();
@@ -875,6 +879,54 @@ abstract class DBTable{
         }
 
         return $validated;
+
+    }
+
+}
+
+class TableInstaller{
+
+    // install db tables
+    // remember, use: register_activation_hook
+
+    public function install($table_classes){
+        if(is_array($table_classes)){
+
+        }else{
+
+        }
+
+
+        global $wpdb;
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+        //create the name of the table including the wordpress prefix (wp_ etc)
+        $search_table = self::settings('table_name_files');
+
+        //check if there are any tables of that name already
+        if($wpdb->get_var("show tables like '$search_table'") !== $search_table)
+        {
+            $sql =  "CREATE TABLE ". $search_table . " (
+					 `file_id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+					 `file_name` varchar(255) COLLATE utf8mb4_unicode_ci COMMENT 'name of the file',
+					 `file_description` TEXT COLLATE utf8mb4_unicode_ci COMMENT 'file description',
+					 `rel_path` VARCHAR(255) NOT NULL UNIQUE COMMENT 'file path relative to the upload dir incl filename',
+					 `file_size` bigint(20) UNSIGNED NOT NULL COMMENT 'file size in byte',
+					 `mime_type` varchar(255) NOT NULL,
+					 `author` bigint(20) NOT NULL COMMENT 'uploader id',
+					 `upload_date` bigint(20) UNSIGNED NOT NULL COMMENT 'unix timestamp of the upload',
+					 PRIMARY KEY (`file_id`)
+					) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci COMMENT='Uploaded files';";
+
+            dbDelta($sql);
+        }
+    }
+    public function clear($table_classes){
+
+    }
+    public function uninstall($table_classes){
+
 
     }
 

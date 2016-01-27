@@ -6,6 +6,9 @@
 - definie table abstraction classes
 - have fun
 
+# Upcomming Features
+- Generate DBTable class from constructor
+
 # Installation
 
 ```php
@@ -52,5 +55,58 @@ class TestTable extends DBTable{
 
 ## 3. Table abstraction
 
+## 4. Validator
+
+- *Escaping* done by $wpdb (string or numeric entry) and by **Validator** (trim etc.)
+- *Validation* done by **Validator**
+- rules separated by `|`
+
+
+
+**Available validation rules:**
+
+`rule:context1;context2,param1;param2`
+
+- `ban` ban a key or multiple values
+- `required` required key
+- `numeric`
+- `int`
+- `float`
+- `alpha_numeric`
+- `alpha_space`(a-z, A-Z, 0-9, \s)
+- `alpha_dash` (a-z, A-Z, 0-9, _-)
+- `min_len,6`
+- `max_len,100`
+- `boolean` true, false, 0, 1
+- `array`
+- `starts,a;b;c`
+- `ends,a;b;c`
+- `contains,m;f` must contain one of the values
+
+**Available filter rules:**
+- `lowercase`
+- `uppercase`
+- `trim`
+- `exclude`
+- `exclude_keys`
+- `exclude_values`
+
+
+
+
+
+
+
+
+**Usage in DB Interface**
+
+```php
+$interface->db->validator->validate();
+```
+
 # Usage
 
+## General Method Return Behavior
+
+- Empty result: false
+- Wrong input format: Exception

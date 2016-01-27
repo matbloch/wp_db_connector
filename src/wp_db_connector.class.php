@@ -1,5 +1,12 @@
 <?php
 
+namespace dbc;  // db connector
+
+/**
+ * Class Utils
+ * @package dbc
+ * Used in DB Object Interfaces
+ */
 abstract class Utils{
 
     /* data binding and action queuing */
@@ -448,6 +455,7 @@ abstract class DBObjectsHandler extends Utils{
     private $and;       // the common search property
     private $or;        // the common search property
     private $objects;   // the loaded objects
+
     public $table;      // db setup of type DBTable, inherit public access
 
     public function __construct()
@@ -758,6 +766,278 @@ abstract class DBObjectsHandler extends Utils{
 
 }
 
+class Validator{
+
+    protected $errors;   // collects validation errors temporarily
+
+    /*
+     * structure:
+     * array(
+     *  'name1' => 'rule1'
+     *  'name2' => 'rule2'
+     * )
+     */
+    protected $validation_rules;            // define the validation rules
+    public static $validation_methods;      // todo: not yet implemented
+    /*
+     * structure:
+     * array(
+     *  'name1' => 'rule1'
+     *  'name2' => 'rule2'
+     * )
+     */
+    protected $sanitation_rules;            // define sanitation rules
+    public static $sanitation_methods;      // todo: not yet implemented
+
+    public function __construct(array $validation_rules = array())
+    {
+        // copy validation rules
+        foreach($validation_rules as $field_name => $rules){
+            $this->$validation_rules[$field_name] = explode('|', $rules);
+        }
+    }
+
+    public function get_errors(){
+        return $this->errors;
+    }
+
+    public function sanitize(array $data, $context = null){
+
+        foreach($data as $field_name => $value){
+            if(array_key_exists($field_name, $this->sanitation_rules)){
+                foreach($this->sanitation_rules[$field_name] as $rule){
+
+                    $method = null;
+                    $sanitation_context = null;
+                    $param = null;
+
+                    // parse rule for contexts and parameters
+                    if (strstr($rule, ',') !== false) {
+                        $rule   = explode(',', $rule);
+                        $rule   = $rule[0];
+                        $param  = $rule[1];
+                        if (strstr($rule, ':') !== false) {
+                            $rule   = $rule[0];
+                            $sanitation_context  = $rule[1];
+                        }
+                    }
+
+                    $method = 'sanitize_'.$rule;
+                    if($sanitation_context == null || in_array($context, explode(';', $sanitation_context))){
+                        // predefined sanitation rules
+                        if (is_callable(array($this, $method))) {
+                            if(isset($data[$field_name])){
+                                $this->$method($field_name, $context, $data, $param);
+                            }
+                        } else {
+                            throw new \Exception("Validator sanitation method '$method' does not exist.");
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
+    // white-list validation
+    public function validate($context, array $data){
+
+        // clear errors
+        $this->errors = array();
+
+        foreach($data as $field_name => $value){
+            if(array_key_exists($field_name, $this->validation_rules)){
+                foreach($this->validation_rules[$field_name] as $rule){
+
+                    $valid = true;
+                    $method = null;
+                    $rule_context = null;
+                    $param = null;
+
+                    // parse rule for contexts and parameters
+                    if (strstr($rule, ',') !== false) {
+                        $rule   = explode(',', $rule);
+                        $rule   = $rule[0];
+                        $param  = $rule[1];
+                        if (strstr($rule, ':') !== false) {
+                            $rule   = $rule[0];
+                            $rule_context  = $rule[1];
+                        }
+                    }
+
+                    $method = 'validate_'.$rule;
+
+                    // predefined rules - check if in correct context
+                    if($rule_context == null || in_array($context, explode(';', $rule_context))){
+                        if (is_callable(array($this, $method))) {
+                            $valid = $this->$method($field_name, $context, $data, $param);
+                        // inline rule definition
+                        } elseif(isset(self::$validation_methods[$rule])) {
+                            $valid = call_user_func(self::$validation_methods[$rule], $field_name, $context, $data, $param);
+                        } else {
+                            throw new \Exception("Validator method '$method' does not exist.");
+                        }
+                    }
+
+                    // save validation error
+                    if($valid === false){
+                        $this->errors[] = array(
+                            'field' => $field_name,
+                            'context' => $context,
+                            'value' => $value,
+                            'rule' => $rule,
+                            'param' => $param,
+                        );
+                    }
+
+                }
+            }
+        }
+
+        if(empty($this->errors)){
+            return true;
+        }
+
+        return false;
+    }
+
+    /* sanitation functions */
+    private function sanitize_exclude_keys($field, $context, $data, $param = null){
+        if($param != null && is_array($data[$field])){
+            $keys_to_remove = array_flip(explode(';', $param));
+            $data[$field] = array_diff_key($data[$field], $keys_to_remove);
+        }
+    }
+    private function sanitize_exclude_values($field, $context, $data, $param = null){
+        if($param != null && is_array($data[$field])){
+            $data[$field] = array_diff($data[$field], explode(';', $param));
+        }
+    }
+    private function sanitize_exclude($field, $context, $data, $param = null){
+        unset($data[$field]);
+    }
+    private function sanitize_trim($field, $context, $data, $param = null){
+        $data[$field] = trim($data[$field]);
+    }
+    private function sanitize_lowercase($field, $context, $data, $param = null){
+        $data[$field] = strtolower($data[$field]);
+    }
+    private function sanitize_uppercase($field, $context, $data, $param = null){
+        $data[$field] = strtoupper($data[$field]);
+    }
+    /* validation functions */
+    private function validate_ban($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        if($param != null){
+            if(in_array($data[$field], explode(';', $param))){
+                return false;
+            }
+        }
+        return !isset($data[$field]);
+    }
+    private function validate_required($field, $context, $data, $param = null){
+        return isset($data[$field]);
+    }
+    private function validate_numeric($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return is_numeric($data[$field]);
+    }
+    private function validate_float($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return is_float($data[$field]);
+    }
+    private function validate_int($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return is_int($data[$field]);
+    }
+    private function validate_alpha_numeric($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return (preg_match("/^([a-z0-9ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïðòóôõöùúûüýÿ\s])+$/i", $data[$field])?true:false);
+    }
+    private function validate_alpha_space($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return (preg_match('/^([a-z0-9ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïðòóôõöùúûüýÿ])+$/i', $data[$field])?true:false);
+    }
+    private function validate_min_len($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        if (function_exists('mb_strlen')) {
+            if (mb_strlen($data[$field]) >= (int) $param) {
+                return true;
+            }
+        } else {
+            if (strlen($data[$field]) >= (int) $param) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private function validate_max_len($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        if (function_exists('mb_strlen')) {
+            if (mb_strlen($data[$field]) <= (int) $param) {
+                return true;
+            }
+        } else {
+            if (strlen($data[$field]) <= (int) $param) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private function validate_boolean($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return (is_bool($data[$field]) || ($data[$field]==1 || $data[$field]==0));
+    }
+    private function validate_array($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return is_array($data[$field]);
+    }
+    private function validate_starts($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+
+        foreach(explode(';', $param) as $start){
+            if(strpos($data[$field], $start) == 0){
+                return true;
+            }
+        }
+        return false;
+    }
+    private function validate_ends($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        foreach(explode(';', $param) as $end){
+            if(strlen($data[$field]) - strlen($end) == strrpos($data[$field],$end)){
+                return true;
+            }
+        }
+        return false;
+    }
+    private function validate_regex($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return (preg_match($param, $data[$field])?true:false);
+    }
+    private function validate_contains($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        if(in_array($data[$field], explode(';', $param))){
+            return true;
+        }
+        return false;
+    }
+}
+
 
 /**
  * Used to define table properties
@@ -767,31 +1047,39 @@ abstract class DBObjectsHandler extends Utils{
  */
 abstract class DBTable{
 
-    protected $db_table_name;            // holds the db values of the object
+    protected $db_table_name;   // holds the db values of the object
     protected $db_primary_key;
-    protected $db_format;      // defines the value format
-    protected $db_readonly;    // defines the read-only fields
-
-    // input validation
-    protected $validation_rules;            // define the validation rules for all fields (no required fields)
-    protected $required_fields;
-    protected $unique_keys;   // todo: implement unique key pairs
+    protected $db_format;      // defines the value format for $wpdb escaping
 
     // force definition of object properties
     abstract protected function define_db_table_name();
     abstract protected function define_db_primary_key();    // string, single value
     abstract protected function define_db_format();
-    abstract protected function define_db_readonly();
 
-    // input validation
-    abstract protected function define_validation_rules();
-
-    /**
-     * @return array, format: array('{context}'=>array({fieldnames}))
+    /*
+     * format:
+     * array(
+     *      array('col_name1' => 'val1',
+     *            'col_name2' => 'val2'),
+     *      array('col_name3' => 'val3',
+     *            'col_name4' => 'val4'),
+     * )
      */
-    protected function define_required_fields(){
-        return array();
+    protected $unique_key_pairs;
+
+    /** Unique field values: crucial for insert/update
+     * @return array
+     */
+    protected function define_unique_key_pairs(){
+        return array(array());
     }
+
+    /*
+     * format:
+     *      array('col_name1' => 'val1',
+     *            'col_name2' => 'val2')
+     */
+    protected $unique_keys;
 
     /** Unique field values: crucial for insert/update
      * @return array
@@ -800,11 +1088,36 @@ abstract class DBTable{
         return array();
     }
 
-    public function __construct()
-    {
-        // load settings from forced parent setters into properties
-        $this->load_settings();
+
+
+    // -----------------------------------------------------------
+
+
+
+    // validator object
+    public $validator;
+
+
+    // input validation
+    protected $validation_rules;            // define the validation rules for all fields (no required fields)
+    protected $required_fields;
+    protected $db_readonly;                 // defines the read-only fields
+    abstract protected function define_db_readonly();
+
+
+    // input validation
+    abstract protected function define_validation_rules();
+
+    /**
+     * @return array, format: array('{context}'=>array({fieldnames}))
+     * Define required
+     */
+    protected function define_required_fields(){
+        return array();
     }
+
+    // -----------------------------------------------------------
+
 
     // getters
     public function get_db_table_name(){
@@ -834,25 +1147,8 @@ abstract class DBTable{
         return $this->validation_rules;
     }
 
-    // save return value of forced settings functions to object
-    protected function load_settings(){
 
-        // load the settings into the object
-
-        $this->db_primary_key = $this->define_db_primary_key();
-        if(!is_string($this->db_primary_key))
-            throw new Exception('Division durch Null.');
-
-        $this->db_table_name = $this->define_db_table_name();
-        $this->db_format = $this->define_db_format();
-        $this->db_readonly = $this->define_db_readonly();
-
-        // validation
-        $this->validation_rules = $this->define_validation_rules();
-        $this->required_fields = $this->define_required_fields();
-        $this->unique_keys = $this->define_unique_keys();
-    }
-
+    /*
     public function validate(array $fields, $context = 'std', $disp_error = false){
 
         // TODO: context and manual validation (db table defined)
@@ -879,6 +1175,28 @@ abstract class DBTable{
         }
 
         return $validated;
+
+    }
+    */
+
+    public function __construct()
+    {
+        // load settings from forced parent setters into properties
+        $this->db_primary_key = $this->define_db_primary_key();
+        if(!is_string($this->db_primary_key))
+            throw new \Exception('Division durch Null.');
+
+
+        $this->db_table_name = $this->define_db_table_name();
+        $this->db_readonly = $this->define_db_readonly();
+
+        // validation
+        $this->db_format = $this->define_db_format();                   // string/integer
+        $this->validation_rules = $this->define_validation_rules();     // custom formats
+        $this->required_fields = $this->define_required_fields();       // required fields in context
+
+        // initiate validator
+        $this->validator = new Validator();
 
     }
 

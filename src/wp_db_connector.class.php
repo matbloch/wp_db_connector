@@ -30,7 +30,7 @@ abstract class Utils{
     /* data binding and action queuing */
     private $bound_callbacks;   // queued action callbacks (definition in class extension through definition method)
 
-    /* databinding/functionbinding (permanent, binding evaluated at instance creation) */
+    /* data-binding/function-binding (permanent, binding evaluated at instance creation) */
 
     /**
      * Used for data binding in __construct() method. The currently available data is passed to the callback function and the return is saved back.
@@ -163,6 +163,47 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /*
+     * Check if entry exists. Either by single unique key+value or by unque key-pair
+     */
+    public function exists($data){
+
+        // todo: finish
+
+        // sanitation
+        $data = $this->table->validator->sanitize($data, 'update_data');
+
+        // validation
+        $result = $this->table->validator->validate('update_data', $data);
+        if($result === false){
+            return false;
+        }
+
+        $data = array_intersect_key($data, $this->table->get_db_format());
+
+        global $wpdb;
+
+        $unique = $this->table->get_unique_keys();
+        if($unique){
+            $data = array_intersect_key($data, array_flip($unique));
+            $data_format = array_intersect_key($this->table->get_db_format(), $data);
+            $data_format = array_values($data_format);
+
+            // form sql by merging key and formats
+            $sql_where = urldecode(http_build_query($data_format,'',' OR '));
+
+            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $unique_values);
+            $res = $wpdb->get_results( $sql );
+
+            // return if results with same unique key values were found
+            if(!empty($res)){
+                //$this->add_error_msg('insert', 'An entry with the same unique keys already exists.');
+                return false;
+            }
+        }
+
+    }
+
+    /*
      * extracts a unique primary key/keypair data set from $data
      */
     public function unique_identifier_values($data){
@@ -196,7 +237,7 @@ abstract class DBObjectInterface extends Utils{
 
 
         // check if unique key/value pairs are present
-        $fields = unique_identifier_values($fields);
+        $fields = $this->unique_identifier_values($fields);
         if(empty($fields)){
             throw new \Exception("Objects can only loaded from a unique identifier e.g. primary key or unique key pairs");
         }
@@ -294,7 +335,7 @@ abstract class DBObjectInterface extends Utils{
             // extract unique key/value pairs
             $where = $this->unique_identifier_values($where);
             if(empty($where)){
-                throw new \Exception("Objects can only loaded from a unique identifier e.g. primary key or unique key pairs");
+                throw new \Exception("Objects can only be loaded from a unique identifier e.g. primary key or unique key pairs");
             }
         }
 
@@ -371,42 +412,72 @@ abstract class DBObjectInterface extends Utils{
 
     }
 
-    /**
-     * @return mixed
-     */
-    public function delete(){
 
-        // reset error messages
-        $this->reset_emsg(array('delete', 'delete_before', 'delete_after'));
+    public function delete($where = null){
 
-        // TODO: make independent from load
-        $this->loaded();
-
-        try{
-            $this->execute_action_callbacks('delete_before');
-        }catch (\Exception $e){
-            return false;
+        // object must be loaded if no search is available
+        if($where === null){
+            $this->loaded();
+        }else{
+            // extract unique key/value pairs
+            $where = $this->unique_identifier_values($where);
+            if(empty($where)){
+                throw new \Exception("Objects can only be deleted from a unique identifier e.g. primary key or unique key pairs");
+            }
         }
 
-        global $wpdb;
+        // sanitation
+        if($where !== null){
+            $where = $this->table->validator->sanitize($where, 'delete_where');
+            if(empty($where)){
+                throw new \Exception("No correct WHERE in DELETE clause.");
+            }
+        }
 
-        $pk = $this->table->get_db_primary_key();
-        $pk_val = $this->get($pk);
-        $pk_format = $this->table->get_db_format($pk);
+        // validation
+        if($where !== null){
+            $result = $this->table->validator->validate('delete_where', $where);
+            if($result === false){
+                return false;
+            }
+        }
+
+        // get where format
+        if($where !== null){
+            $where_format = array_intersect_key($where, $this->table->get_db_format());
+            ksort($where);
+            ksort($where_format);
+            $where_format = array_values($where_format);
+        }else{
+            $pk = $this->table->get_db_primary_key();
+            $where = array($pk, $this->get($pk));
+            $where_format = array($this->table->get_db_format($pk));
+        }
+
+        // data binding
+        $result = $this->execute_bound_actions('delete_before', $where, $where_format);
+        if($result === false){
+            return false;
+        }
 
         // delete entry
-        $result = $wpdb->delete( $this->table->get_db_table_name(), array($pk=>$pk_val), array($pk_format) );
+        global $wpdb;
+        $success = $wpdb->delete(
+                        $this->table->get_db_table_name(),
+                        $where,
+                        $where_format);
 
         // unset properties to ensure no further manipulations
-        $this->properties = array();
+        if($success === 1){
+            $this->properties = array();
+        }
 
-        try{
-            $this->execute_action_callbacks('delete_after');
-        }catch (\Exception $e){
+        $result = $this->execute_bound_actions('delete_after', $where, $success);
+        if($result === false){
             return false;
         }
 
-        return $result;
+        return $success;
 
     }
 
@@ -416,25 +487,40 @@ abstract class DBObjectInterface extends Utils{
      */
     public function insert(array $data, $force_reload = true){
 
-        // reset error messages
-        $this->reset_emsg(array('insert', 'insert_before', 'insert_after'));
-
         // validate input arguments
         $data = $this->table->validate($data, 'insert');
         if($data === false){
-            $this->add_emsg('insert', 'The input data valitaion failed.');
+            $this->add_emsg('insert', 'The input data validation failed.');
+            return false;
+        }
+
+        // sanitation
+        $data = $this->table->validator->sanitize($data, 'insert');
+
+        // validation
+        $result = $this->table->validator->validate('insert', $data);
+        if($result === false){
+            return false;
+        }
+
+        // data binding
+        $result = $this->execute_bound_actions('insert_before', $data);
+        if($result === false){
             return false;
         }
 
         // get values
-        $values = array_intersect_key($data, $this->table->get_db_format());
-        $value_format = array_intersect_key($this->table->get_db_format(), $values);
+        $data = array_intersect_key($data, $this->table->get_db_format());
+        $value_format = array_intersect_key($this->table->get_db_format(), $data);
+
+        if(empty($data)){
+            throw new \Exception('No valid input data.');
+        }
+
         ksort($value_format);
         ksort($values);
 
-        // === data binding
-        $exec = $this->execute_bound_actions('insert_before', $values);
-        if($exec === false){return false;};
+        $value_format = array_values($value_format);
 
         global $wpdb;
 
@@ -456,25 +542,34 @@ abstract class DBObjectInterface extends Utils{
 
             // return if results with same unique key values were found
             if(!empty($res)){
-                $this->add_error_msg('insert', 'An entry with the same unique keys already exists.');
+                //$this->add_error_msg('insert', 'An entry with the same unique keys already exists.');
                 return false;
             }
         }
 
-        $result = $wpdb->insert(
+        $unique_pairs = $this->table->get_unique_key_pairs();
+        if(!empty($unique_pairs)){
+
+            // todo: implement unique key pairs
+
+        }
+
+        $success = $wpdb->insert(
             $this->table->get_db_table_name(),
             $values,
             $value_format
         );
 
-        if($result == 1 && $force_reload == true){
+        // === data binding
+        $result = $this->execute_bound_actions('insert_after', $values, $success);
+        if($result === false){
+            return false;
+        }
+
+        if($success == 1 && $force_reload == true){
             // reload inserted data. Necessary for default fields
             $this->load(array($this->table->get_db_primary_key() => $wpdb->insert_id));
         }
-
-        // === data binding
-        $exec = $this->execute_bound_actions('insert_after', $result);
-        if($exec === false){return false;};
 
         return $result;
 
@@ -653,6 +748,10 @@ abstract class DBObjectsHandler extends Utils{
         return false;
     }
 
+    /**
+     * @param $fields
+     * @return bool
+     */
     public function delete($fields){
 
         if(!$where = $this->prepare_sql_where($fields)){

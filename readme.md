@@ -93,18 +93,40 @@ class TestTable extends DBTable{
 - `exclude_values`
 
 
-
-
-
-
-
-
 **Usage in DB Interface**
 Validator instance is bound to table instance
 ```php
 $interface->table->validator->sanitize($context, $data);
 $interface->table->validator->validate($context, $data);
 ```
+
+## 5. DBObjectInterface
+
+Represents a single unique entry in the database table.
+
+**Representation specific methods**
+- `load($fields, $return_keys)`
+	Loads the whole representation stored in the db into the object. Loading is only possible from a nique key(-pair)
+- `get($keys)`
+	Only available if object is loaded.
+
+**Direct methods**
+
+
+
+### Databinding
+
+```php
+class File extends DBObjectInterface{
+    protected function define_data_binding(){
+        bind_action('insert_before', 'echo_sth')
+    }
+    protected function echo_sth(){
+    	echo 'I am called before an insertion.';
+    }
+}
+```
+
 
 # Usage
 

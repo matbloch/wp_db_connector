@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * @author      Matthias Bloch (https://github.com/matbloch)
+ * @copyright   Copyright (c) 2016
+ *
+ * @version     1.0
+ */
+
 namespace wpdbc;  // db connector
 
 /**
@@ -9,25 +16,34 @@ namespace wpdbc;  // db connector
  */
 abstract class Utils{
 
+    /*
+     * Example:
+     * public function insert($data, $args){
+     *
+     *      $result = $this->utils->execute_bound_actions('insert_before', $data, $args);
+     *      if($result === false){
+     *          return false;
+     *      }
+     * }
+     */
+
     /* data binding and action queuing */
     private $bound_callbacks;   // queued action callbacks (definition in class extension through definition method)
-
-    // stores error messages when a member method returns false
-    private $errors;
 
     /* databinding/functionbinding (permanent, binding evaluated at instance creation) */
 
     /**
-     * Used for data binding. The currently available data is passed to the callback function and the return is saved back.
-     * To abort the parent function, set $eval_return to true and return false/0 in the bound method
+     * Used for data binding in __construct() method. The currently available data is passed to the callback function and the return is saved back.
+     * To abort the parent function, set $eval_return to true and return false in the bound method
      * @param string $context string context where the queued functions are executed
      * @param string $callback name of the callback function (extended class method) as string
-     * @param bool $eval_return if set to true, the parent function returns 0/false if return is 0/false
+     * @param bool $eval_return if set to true, the parent function returns false if return is false
      * @param int $order relative order the function is executed
+     * @throws \Exception if callback does not exist
      */
 
     protected function bind_action($context, $callback, $eval_return = false, $order = 0){
-        if(method_exists ( $this ,  $callback )){
+        if(is_callable (array( $this ,  $callback ))){
             if($order == 0){
                 $this->bound_callbacks[$context][] = array($callback, $eval_return);
             }else{
@@ -36,29 +52,32 @@ abstract class Utils{
                 }
                 $this->bound_callbacks[$context][$order] = array($callback, $eval_return);
             }
+        }else{
+            throw new \Exception("Bound action '$callback' does not exist.");
         }
     }
 
     /**
      * @param string $context Context the bound actions to execute
-     * @param mixed $input Contextual argument of the parent function
+     * @param mixed $data Contextual argument of the parent function
+     * @param mixed $args
      * @return bool Returns false to force parent function to quit
      */
-    protected function execute_bound_actions($context, &$input){
+    protected function execute_bound_actions($context, &$data, $args = null){
+
         if(!empty($this->bound_callbacks[$context])){
             krsort($this->bound_callbacks[$context]);
-            foreach($this->bound_callbacks[$context] as $cb){
-                $result = call_user_func( array($this,$cb), $input );
+            foreach($this->bound_callbacks[$context] as $binding){
 
-                // if the function returns something - save to the input
-                if(!is_null($result)){
+                $result = $this->$binding[0]($data, $args);
+
+                if($result === false && $binding[1] === true){
+                    //$this->add_emsg($context, 'The bound function "'.$binding[0].'" returned false.');
                     // force parent function to return false
-                    if($result === false){
-                        $this->add_emsg($context, 'The bound function "'.$cb.'" returned false.');
-                        return false;
-                    }else{
-                        $input = $result;
-                    }
+                    return false;
+                }else{
+                    // if the function returns something - save to the input
+                    $data = $result;
                 }
             }
         }
@@ -68,6 +87,8 @@ abstract class Utils{
 
     }
 
+    // stores error messages when a member method returns false
+    private $errors;
 
     /* error handling */
     public function add_emsg($context, $msg){
@@ -100,111 +121,102 @@ abstract class Utils{
 
 abstract class DBObjectInterface extends Utils{
 
-    // holds the db values of the object
-    private $properties;
-    public $table; // db setup of type DBTable, inherit public access
+    private $properties;    // holds the db values of the object
+    public $table;          // db setup of type DBTable, inherit public access
 
-    // set the db table
+    /**
+     * @return DBTable Extended Database Table object instance
+     */
     abstract protected function define_db_table();
 
-    public function define_data_binding(){
+    protected function define_data_binding(){
         // placeholder function
         // use bind_action here to define the data binding
     }
 
     public function __construct()
     {
+        // create corresponding db table instance
+        $this->table = $this->define_db_table();
 
-        // todo: initiation from values
-
-        if(!is_subclass_of($this->define_db_table(), '\wpdc\DBTable')){
+        if(!is_subclass_of($this->table, '\wpdc\DBTable')){
             throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
         }
-
-        // define the corresponding table
-        $this->table = $this->define_db_table();
 
         // define the data binding
         $this->define_data_binding();
 
-        // reset errors messages
-        $this->errors = new ErrorHandler();
-
-        /*
-        // parse field values
-        $values = array_intersect_key($field_values, $this->table->get_db_format());
-
-        // validate
-        if(!$this->table->validate($values, 'construct')){
-            throw new \Exception('Object has been initiated with illegal values.');
-        }
-
-        $this->properties = $values;
-        */
+        // todo: initiation from values
 
     }
 
     // checks if data is loaded
     public function loaded(){
+        // todo: load from init - check if one of the primary keys is loaded
         if(empty($this->properties)){
             throw new \Exception('Object is not loaded.');
         }
-
-
-        // todo: load from init - check if one of the primary keys is loaded
     }
 
     public function is_loaded(){
         return !empty($this->properties);
     }
 
+    /*
+     * extracts a unique primary key/keypair data set from $data
+     */
+    public function unique_identifier_values($data){
+        $data = array_intersect_key($this->table->get_unique_keys(), $data);
+        if(empty($data)){
+            foreach($this->table->get_unique_key_pairs() as $pair){
+                if($intersection = array_intersect_key($pair, $data)){
+                    $data = $intersection;
+                    break;
+                }
+            }
+        }
+        return $data;
+    }
+
     /**
+     * Load all information into the object. Only possible for unique key/key-pair information.
      * @param array $fields
      * @param array $return_keys
      * @return bool
+     * @throws \Exception if input key(s) are not a unique identifier
      */
-    public function load(array $fields = array(), array $return_keys = array()){
+    public function load(array $fields, array $return_keys = array()){
         /*
          * success: true
          * fail: false
          */
 
-        // load from additional information
-        $keys_input = array();
-        if(!empty($fields)){
+        // sanitation
+        $fields = $this->table->validator->sanitize($fields, 'get_single');
 
-            $fields = $this->table->validate($fields, 'load');
-            if($fields === false){
-                return false;
-            }
 
-            // get overlapping db_key => db_format array
-            $keys_input = array_intersect_key($this->table->get_db_format(), $fields);
-
-            // do not execute query if no arguments given
-            if(empty($keys_input)){
-                return false;
-            }
+        // check if unique key/value pairs are present
+        $fields = unique_identifier_values($fields);
+        if(empty($fields)){
+            throw new \Exception("Objects can only loaded from a unique identifier e.g. primary key or unique key pairs");
         }
 
-        // todo: complete merge with initiator data
-        $keys_prop = array();
-        if($this->get()){
-            $keys_prop = array_intersect_key($this->table->get_db_format(), $this->get());
+        // validation
+        $result = $this->table->validator->validate('load', $fields);
+        if($result === false){
+            return false;
         }
 
-        // get keys and sort them
-        $keys = array_merge($keys_input, $keys_prop);
-        ksort($keys);
+        // get overlapping db_key => db_format array
+        $value_format = array_intersect_key($this->table->get_db_format(), $fields);
+
+        // sort both values and format by keys
+        ksort($fields);
+        ksort($value_format);
 
         // form sql by merging key and formats
-        $sql_where = urldecode(http_build_query($keys,'',' AND '));
-
-        // get available values (compare input keys to reference)
-        // sort and flatten them
-        $values = array_intersect_key($fields, $this->table->get_db_format());
-        ksort($values);
-        $values = array_values($values);
+        $sql_where = urldecode(http_build_query($value_format,'',' AND '));
+        $values = array_values($fields);
 
         // perform query
         global $wpdb;
@@ -213,7 +225,7 @@ abstract class DBObjectInterface extends Utils{
         $result = $wpdb->get_row($sql, ARRAY_A, 0);
 
         if($result !== NULL){
-            // TODO: convert properties to correct var type
+
             $this->properties = $result;
 
             if(!empty($return_keys)){
@@ -233,12 +245,8 @@ abstract class DBObjectInterface extends Utils{
      */
     public function get($keys = array()){
 
-        try {
-            $this->loaded();
-        } catch (\Exception $e) {
-            // object can not be loaded return empty result
-            return false;
-        }
+        // object MUST be loaded
+        $this->loaded();
 
         // string input - single value
         if(is_string($keys)){
@@ -272,69 +280,94 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
-     * @param array $data
-     * @return bool 1: success, 0: nothing updated, false: fail
+     * @param array $data   data format: array($key => $value)
+     * @param null $where   where format: array($key => $value)
+     * @return bool         1: success, 0: nothing updated, false: fail
+     * @throws \Exception
      */
-    public function update(array $data){
+    public function update(array $data, $where = null){
 
-        $this->loaded();
+        // object must be loaded if no search is available
+        if($where === null){
+            $this->loaded();
+        }else{
+            // extract unique key/value pairs
+            $where = $this->unique_identifier_values($where);
+            if(empty($where)){
+                throw new \Exception("Objects can only loaded from a unique identifier e.g. primary key or unique key pairs");
+            }
+        }
 
-        try{
-            $this->execute_action_callbacks('update_before');
-        }catch (\Exception $e){
+        // sanitation
+        $data = $this->table->validator->sanitize($data, 'update_data');
+        if($where !== null){
+            $where = $this->table->validator->sanitize($where, 'update_where');
+            if(empty($where)){
+                throw new \Exception("No correct WHERE in UPDATE clause.");
+            }
+        }
+
+        // validation
+        $result = $this->table->validator->validate('update_data', $data);
+        if($result === false){
+            return false;
+        }
+        if($where !== null){
+            $result = $this->table->validator->validate('update_where', $where);
+            if($result === false){
+                return false;
+            }
+        }
+
+        // data binding
+        $result = $this->execute_bound_actions('update_before', $data, $where);
+        if($result === false){
             return false;
         }
 
-        // validate input arguments
-        $data = $this->table->validate($data, 'update');
-        if($data === false){
-            return false;
-        }
+        // filter update values
+        $data = array_intersect_key($data, $this->table->get_db_format());
+        if(empty($data)){return false;}
+        $value_format = array_intersect_key($data, $this->table->get_db_format());
 
-        // unset readonly files
-        $available_fields = array_diff_key($this->table->get_db_format(),array_flip($this->table->get_db_readonly()));
-        if(empty($available_fields)){return false;}
-
-        // get values
-        $values = array_intersect_key($data, $available_fields);
-        ksort($values);
-
-        // do not execute query if no arguments given
-        if(empty($values)){return false;}
-
-        // get format
-        $value_format = array_intersect_key($available_fields, $values);
+        // sort values and format
+        ksort($data);
         ksort($value_format);
+        $data = array_values($data);
+        $value_format = array_values($value_format);
 
+        if($where !== null){
+            $where_format = array_intersect_key($where, $this->table->get_db_format());
+            ksort($where);
+            ksort($where_format);
+            $where_format = array_values($where_format);
+        }else{
+            $pk = $this->table->get_db_primary_key();
+            $where = array($pk, $this->get($pk));
+            $where_format = array($this->table->get_db_format($pk));
+        }
+
+        // perform update
         global $wpdb;
-
-        $pk = $this->table->get_db_primary_key();
-        $db_format = $this->table->get_db_format();
-
-        $where_format = array($db_format[$pk]);
-        $where_value = array($pk => $this->get($pk));
-
-        // do update on this file
-        $result = $wpdb->update(
+        $success = $wpdb->update(
             $this->table->get_db_table_name(),
-            $values,    // data
-            $where_value,  // where
-            $value_format,
-            $where_format   // pk format
+            $data,          // data
+            $where,         // where
+            $value_format,  // data format
+            $where_format   // where format
         );
 
-        if($result === 1){
+        $result =  $this->execute_bound_actions('update_after', $data, $success);
+        if($result === false){
+            return false;
+        }
+
+        if($success === 1){
             // update object properties
             $this->properties = array_merge($this->properties, $data);
         }
 
-        try{
-            $this->execute_action_callbacks('update_after');
-        }catch (\Exception $e){
-            return false;
-        }
-
-        return $result;
+        return $success;
 
     }
 
@@ -837,6 +870,7 @@ class Validator{
             }
         }
 
+        return $data;
     }
 
     // white-list validation
@@ -902,29 +936,30 @@ class Validator{
     }
 
     /* sanitation functions */
-    private function sanitize_exclude_keys($field, $context, $data, $param = null){
+    private function sanitize_exclude_keys($field, $context, &$data, $param = null){
         if($param != null && is_array($data[$field])){
             $keys_to_remove = array_flip(explode(';', $param));
             $data[$field] = array_diff_key($data[$field], $keys_to_remove);
         }
     }
-    private function sanitize_exclude_values($field, $context, $data, $param = null){
+    private function sanitize_exclude_values($field, $context, &$data, $param = null){
         if($param != null && is_array($data[$field])){
             $data[$field] = array_diff($data[$field], explode(';', $param));
         }
     }
-    private function sanitize_exclude($field, $context, $data, $param = null){
+    private function sanitize_exclude($field, $context, &$data, $param = null){
         unset($data[$field]);
     }
-    private function sanitize_trim($field, $context, $data, $param = null){
+    private function sanitize_trim($field, $context, &$data, $param = null){
         $data[$field] = trim($data[$field]);
     }
-    private function sanitize_lowercase($field, $context, $data, $param = null){
+    private function sanitize_lowercase($field, $context, &$data, $param = null){
         $data[$field] = strtolower($data[$field]);
     }
-    private function sanitize_uppercase($field, $context, $data, $param = null){
+    private function sanitize_uppercase($field, $context, &$data, $param = null){
         $data[$field] = strtoupper($data[$field]);
     }
+
     /* validation functions */
     private function validate_ban($field, $context, $data, $param = null){
         if(!isset($data[$field]))
@@ -1041,6 +1076,7 @@ class Validator{
 
 /**
  * Used to define table properties
+ * SINGLETON - only one instance
  *
  * Class DBTable
  * @package wpdbc
@@ -1121,7 +1157,7 @@ abstract class DBTable{
             if(isset($this->db_format[$col_name])){
                 return $this->db_format[$col_name];
             }
-            return '';
+            return false;
         }
 
         return $this->db_format;

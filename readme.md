@@ -7,7 +7,8 @@
 - have fun
 
 # Upcomming Features
-- Generate DBTable class from constructor
+- Generate static DBTable class from constructor
+- Extend Validator inline by static validation and sanitation methods
 
 # Installation
 
@@ -99,9 +100,10 @@ class TestTable extends DBTable{
 
 
 **Usage in DB Interface**
-
+Validator instance is bound to table instance
 ```php
-$interface->db->validator->validate();
+$interface->table->validator->sanitize($context, $data);
+$interface->table->validator->validate($context, $data);
 ```
 
 # Usage

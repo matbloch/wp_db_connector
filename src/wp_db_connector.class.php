@@ -1,10 +1,10 @@
 <?php
 
-namespace dbc;  // db connector
+namespace wpdbc;  // db connector
 
 /**
  * Class Utils
- * @package dbc
+ * @package wpdbc
  * Used in DB Object Interfaces
  */
 abstract class Utils{
@@ -789,7 +789,7 @@ class Validator{
     protected $sanitation_rules;            // define sanitation rules
     public static $sanitation_methods;      // todo: not yet implemented
 
-    public function __construct(array $validation_rules = array())
+    public function __construct(array $validation_rules = array(), array $sanitation_rules = array())
     {
         // copy validation rules
         foreach($validation_rules as $field_name => $rules){
@@ -1043,7 +1043,7 @@ class Validator{
  * Used to define table properties
  *
  * Class DBTable
- * @package wpdc
+ * @package wpdbc
  */
 abstract class DBTable{
 
@@ -1051,10 +1051,14 @@ abstract class DBTable{
     protected $db_primary_key;
     protected $db_format;      // defines the value format for $wpdb escaping
 
-    // force definition of object properties
-    abstract protected function define_db_table_name();
-    abstract protected function define_db_primary_key();    // string, single value
-    abstract protected function define_db_format();
+    public $validator;          // validator object
+
+    /*
+     * format:
+     *      array('col_name1' => 'val1',
+     *            'col_name2' => 'val2')
+     */
+    protected $unique_keys;
 
     /*
      * format:
@@ -1067,59 +1071,44 @@ abstract class DBTable{
      */
     protected $unique_key_pairs;
 
+    public function __construct()
+    {
+        // load settings from forced parent setters into properties
+        $this->db_primary_key = $this->define_db_primary_key();
+        $this->db_table_name = $this->define_db_table_name();
+        $this->db_format = $this->define_db_format();
+
+        // validation and sanitation
+        $this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
+    }
+
+    /* forced definitions */
+    abstract protected function define_db_table_name();
+    abstract protected function define_db_primary_key();    // string, single value
+    abstract protected function define_db_format();
+
+    /* placeholder functions */
+
     /** Unique field values: crucial for insert/update
      * @return array
      */
     protected function define_unique_key_pairs(){
         return array(array());
     }
-
-    /*
-     * format:
-     *      array('col_name1' => 'val1',
-     *            'col_name2' => 'val2')
-     */
-    protected $unique_keys;
-
     /** Unique field values: crucial for insert/update
      * @return array
      */
     protected function define_unique_keys(){
         return array();
     }
-
-
-
-    // -----------------------------------------------------------
-
-
-
-    // validator object
-    public $validator;
-
-
-    // input validation
-    protected $validation_rules;            // define the validation rules for all fields (no required fields)
-    protected $required_fields;
-    protected $db_readonly;                 // defines the read-only fields
-    abstract protected function define_db_readonly();
-
-
-    // input validation
-    abstract protected function define_validation_rules();
-
-    /**
-     * @return array, format: array('{context}'=>array({fieldnames}))
-     * Define required
-     */
-    protected function define_required_fields(){
-        return array();
+    protected function define_validation_rules(){
+        return array(array());
+    }
+    protected function define_sanitation_rules(){
+        return array(array());
     }
 
-    // -----------------------------------------------------------
-
-
-    // getters
+    /* getters */
     public function get_db_table_name(){
         return $this->db_table_name;
     }
@@ -1137,69 +1126,12 @@ abstract class DBTable{
 
         return $this->db_format;
     }
-    public function get_db_readonly(){
-        return $this->db_readonly;
-    }
     public function get_unique_keys(){
         return $this->unique_keys;
     }
-    public function get_validation_rules(){
-        return $this->validation_rules;
+    public function get_unique_key_pairs(){
+        return $this->unique_key_pairs;
     }
-
-
-    /*
-    public function validate(array $fields, $context = 'std', $disp_error = false){
-
-        // TODO: context and manual validation (db table defined)
-
-        // check required fields
-        if(!empty($this->required_fields[$context])){
-            // get in this context required fields
-            $req_fields = array_filter(array_intersect_key($fields, array_flip($this->required_fields[$context])));
-            if(empty($req_fields)){
-                return false;
-            }
-        }
-
-        // check value format
-        $gump = new \GUMP();
-        $gump->validation_rules($this->get_validation_rules());
-
-        $fields = $gump->sanitize($fields);
-        $validated = $gump->run($fields);
-
-        if($validated === false) {
-            if($disp_error){echo $gump->get_readable_errors(true);}
-            return false;
-        }
-
-        return $validated;
-
-    }
-    */
-
-    public function __construct()
-    {
-        // load settings from forced parent setters into properties
-        $this->db_primary_key = $this->define_db_primary_key();
-        if(!is_string($this->db_primary_key))
-            throw new \Exception('Division durch Null.');
-
-
-        $this->db_table_name = $this->define_db_table_name();
-        $this->db_readonly = $this->define_db_readonly();
-
-        // validation
-        $this->db_format = $this->define_db_format();                   // string/integer
-        $this->validation_rules = $this->define_validation_rules();     // custom formats
-        $this->required_fields = $this->define_required_fields();       // required fields in context
-
-        // initiate validator
-        $this->validator = new Validator();
-
-    }
-
 }
 
 class TableInstaller{

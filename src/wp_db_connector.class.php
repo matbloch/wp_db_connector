@@ -165,15 +165,13 @@ abstract class DBObjectInterface extends Utils{
     /*
      * Check if entry exists. Either by single unique key+value or by unque key-pair
      */
-    public function exists($data){
-
-        // todo: finish
+    public function exists(array $data){
 
         // sanitation
-        $data = $this->table->validator->sanitize($data, 'update_data');
+        $data = $this->table->validator->sanitize($data, 'exists');
 
         // validation
-        $result = $this->table->validator->validate('update_data', $data);
+        $result = $this->table->validator->validate('exists', $data);
         if($result === false){
             return false;
         }
@@ -182,23 +180,60 @@ abstract class DBObjectInterface extends Utils{
 
         global $wpdb;
 
-        $unique = $this->table->get_unique_keys();
-        if($unique){
+        if(count($data) == 1 && $unique = $this->table->get_unique_keys()){
+
             $data = array_intersect_key($data, array_flip($unique));
+            if(empty($data)){
+                throw \Exception('No valid search value given.');
+            }
             $data_format = array_intersect_key($this->table->get_db_format(), $data);
             $data_format = array_values($data_format);
 
             // form sql by merging key and formats
             $sql_where = urldecode(http_build_query($data_format,'',' OR '));
 
-            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $unique_values);
-            $res = $wpdb->get_results( $sql );
+            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $data);
+            $result = $wpdb->get_results( $sql );
 
             // return if results with same unique key values were found
-            if(!empty($res)){
-                //$this->add_error_msg('insert', 'An entry with the same unique keys already exists.');
-                return false;
+            if(!empty($result)){
+                return true;
             }
+
+            return false;
+
+        }elseif(count($data) > 1){
+
+            $intersect = false;
+            foreach($this->table->get_unique_key_pairs() as $pairs){
+                if(count($data) == count(array_intersect_key($data, $pairs))){
+                    $intersect = true;
+                    break;
+                }
+            }
+
+            if(!$intersect){
+                throw \Exception('No valid search value given.');
+            }
+
+            $data_format = array_intersect_key($this->table->get_db_format(), $data);
+            $data_format = array_values($data_format);
+
+            // form sql by merging key and formats
+            $sql_where = urldecode(http_build_query($data_format,'',' AND '));
+
+            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $data);
+            $result = $wpdb->get_results( $sql );
+
+            // return if results with same unique key values were found
+            if(!empty($result)){
+                return true;
+            }
+
+            return false;
+
+        }else{
+            throw \Exception('No search value given');
         }
 
     }
@@ -1190,18 +1225,15 @@ abstract class DBTable{
 
     /*
      * format:
-     *      array('col_name1' => 'val1',
-     *            'col_name2' => 'val2')
+     *      array('col_name1', 'col_name2')
      */
     protected $unique_keys;
 
     /*
      * format:
      * array(
-     *      array('col_name1' => 'val1',
-     *            'col_name2' => 'val2'),
-     *      array('col_name3' => 'val3',
-     *            'col_name4' => 'val4'),
+     *      array('col_name1', 'col_name2'),
+     *      array('col_name3', 'col_name4'),
      * )
      */
     protected $unique_key_pairs;
@@ -1236,6 +1268,7 @@ abstract class DBTable{
     protected function define_unique_keys(){
         return array();
     }
+
     protected function define_validation_rules(){
         return array(array());
     }

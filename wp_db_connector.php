@@ -57,8 +57,9 @@ $result = $item->insert(array(
 
 
 //$test->test_unique_key_item();
-$test->test_coupled_key_item();
-// $test->test_validation();
+//$test->test_coupled_key_item();
+//$test->test_direct_manipulation();
+$test->test_validation();
 // $test->test_sanitation();
 
 die();

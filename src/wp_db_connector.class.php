@@ -118,7 +118,6 @@ abstract class Utils{
 
 }
 
-
 abstract class DBObjectInterface extends Utils{
 
     private $properties;    // holds the db values of the object
@@ -263,8 +262,6 @@ abstract class DBObjectInterface extends Utils{
             throw new \Exception('Database has multiple unique entries.');
         }
     }
-
-
 
     /*
      * extracts a unique primary key/keypair data set from $data
@@ -922,14 +919,13 @@ class Validator{
     {
         // copy validation rules
         foreach($validation_rules as $field_name => $rules){
-            $this->$validation_rules[$field_name] = explode('|', $rules);
+            $this->validation_rules[$field_name] = explode('|', $rules);
         }
 
         // copy validation rules
         foreach($sanitation_rules as $field_name => $rules){
-            $this->$sanitation_rules[$field_name] = explode('|', $rules);
+            $this->sanitation_rules[$field_name] = explode('|', $rules);
         }
-
     }
 
     public function get_errors(){
@@ -1000,15 +996,17 @@ class Validator{
                     $rule_context = null;
                     $param = null;
 
-                    // parse rule for contexts and parameters
+                    // parse parameters
                     if (strstr($rule, ',') !== false) {
                         $rule   = explode(',', $rule);
                         $rule   = $rule[0];
                         $param  = $rule[1];
-                        if (strstr($rule, ':') !== false) {
-                            $rule   = $rule[0];
-                            $rule_context  = $rule[1];
-                        }
+                    }
+                    // parse context
+                    if (strstr($rule, ':') !== false) {
+                        $rule   = explode(':', $rule);
+                        $rule = $rule[0];
+                        $rule_context  = $rule[1];
                     }
 
                     $method = 'validate_'.$rule;
@@ -1096,7 +1094,7 @@ class Validator{
             return;
         return is_float($data[$field]);
     }
-    private function validate_int($field, $context, $data, $param = null){
+    private function validate_integer($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return;
         return is_int($data[$field]);

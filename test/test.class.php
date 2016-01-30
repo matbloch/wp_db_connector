@@ -144,46 +144,43 @@ class WPDBCTest{
 	
 	public function test_direct_manipulation(){
 		
-		$this->start_msg('test_direct_manipulation');
+		$this->start_msg('test_direct_manipulation()');
 
         $item = new TestItem();
 		// insert new
 		$result = $item->insert(array(
-			'name'=>'Muster',
-			'vorname'=>'Hans',
-			'alter'=> '22',
-			'id_nummer' => 234234
+			'name'=>'Mustermann',
+			'vorname'=>'Max',
+			'alter'=> '35',
+			'id_nummer' => 2464323
 		));
 
 		// get value
-		echo '<strong>$item->get(alter):</strong> '.$item->get('alter').'<br>';
-		
+        echo '<strong>Old values:</strong> '.print_r($item->get(), true).'<br>';
 		
 		// update
 		$result = $item->update(array(
 			'alter' => 55
 		));
-		
-		
-		echo '<strong>$item->get(alter):</strong> '.$item->get('alter').'<br>';
-		
+
+        echo '<strong>New values:</strong> '.print_r($item->get(), true).'<br>';
+
 		// delete
 		$result = $item->delete();
-		
-		
+        echo '<strong>Deleted item:</strong> '.($result?'YES':'NO').'<br>';
+
 		// check if exists
 		$result = $item->exists(array(
-			'name'=>'Muster',
-			'vorname'=>'Hans'
+            'name'=>'Mustermann',
+            'vorname'=>'Max'
 		));
-		
-		echo '<strong>Testitem exits:</strong> '.$result.'<br>';
+        echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 	}
 	
 	public function test_coupled_key_item(){
 		
 
-		$this->start_msg('test_coupled_key_item');
+		$this->start_msg('test_coupled_key_item()');
 		
 		// test single item
 		$item = new TestItem();
@@ -261,7 +258,7 @@ class WPDBCTest{
 	/* test regular routines - unique key */
 	public function test_unique_key_item(){
 		
-		$this->start_msg('test_unique_key_item');
+		$this->start_msg('test_unique_key_item()');
 		
 		$item = new TestItem();
 		
@@ -328,7 +325,20 @@ class WPDBCTest{
 	}
 	
 	public function test_validation(){
-		
+
+        $this->start_msg('test_validation()');
+
+        $item = new TestItem();
+
+        // insert new
+        $result = $item->insert(array(
+            'name'=>'Muster',
+            'vorname'=>'         Hans',
+            'alter'=> 22,
+            'id_nummer' => 143543
+        ));
+
+        echo '<strong>Validation errors:</strong> '.print_r($item->table->validator->get_errors(), true);
 		
 	}
 	
@@ -337,8 +347,7 @@ class WPDBCTest{
 	}
 	
 	public function test_function_binding(){
-		
-		
+
 		
 	}
 	

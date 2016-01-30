@@ -2,9 +2,9 @@
 /*
  * Plugin Name: Wordpress Table Connector
  * Version: 1.0
- * Plugin URI: http://www.hughlashbrooke.com/
+ * Plugin URI: https://github.com/matbloch
  * Description: This is a plugin to test the wordpress table connector class
- * Author: Hugh Lashbrooke
+ * Author: Matthias Bloch
  * Author URI: https://github.com/matbloch
  * Requires at least: 4.0
  * Tested up to: 4.0

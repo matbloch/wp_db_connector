@@ -27,7 +27,38 @@ require_once( 'test/test.class.php' );
 
 $test = new \wpdbc\WPDBCTest();
 
+$test_data = array(
+    'stupid' => 123,
+    'name' => 'Muster',
+    'vorname' => 'Fred',
+    'code' => '#243645',
+    'id_nummer' => 1214353
+);
+
+/*
+// insert item
+$result = $item->insert(array(
+    'name'=>'Freddy',
+    'vorname'=>'Krueger',
+    'code'=>'#8239709',
+    'alter'=> '22',
+    'id_nummer' => 2543524
+));
+// insert item
+$result = $item->insert(array(
+    'name'=>'Martin',
+    'vorname'=>'Solveign',
+    'alter'=> '54',
+    'code'=>'#000382',
+    'id_nummer' => 134523
+));
+
+*/
+
+
 //$test->test_unique_key_item();
-// $test->test_coupled_key_item();
+$test->test_coupled_key_item();
 // $test->test_validation();
 // $test->test_sanitation();
+
+die();

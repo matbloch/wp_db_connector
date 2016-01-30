@@ -9,6 +9,7 @@
 # Upcomming Features
 - Generate static DBTable class from constructor
 - Extend Validator inline by static validation and sanitation methods
+- DBTable as singleton
 
 # Installation
 

@@ -139,7 +139,7 @@ abstract class DBObjectInterface extends Utils{
         // create corresponding db table instance
         $this->table = $this->define_db_table();
 
-        if(!is_subclass_of($this->table, '\wpdc\DBTable')){
+        if(!is_subclass_of($this->table, 'wpdbc\DBTable')){
             throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
         }
 
@@ -147,6 +147,71 @@ abstract class DBObjectInterface extends Utils{
         $this->define_data_binding();
 
         // todo: initiation from values
+
+    }
+
+    /**
+     * Generates a SQL query string to find a unique entry
+     * @param array $data associative array with key names equal column names
+     * @return array array[0]: SQL WHERE string, array[1]: values
+     */
+    public function sql_unique_where(array $data){
+
+        $output = array();
+        $unique_data = array();
+        $pair_data = array();
+
+        // sql data
+        $sql_where = array();
+        $values = array();
+        $sql_string = '';
+
+        // first check for primary key
+        $pk = $this->table->get_db_primary_key();
+        if($data[$pk]){
+            $data_format = $this->table->get_db_format($pk);
+            $sql_where[] = $pk.'='.$data_format;
+            $values = array($data[$pk]);
+        }else{
+
+            // single unique keys
+            if($this->table->get_unique_keys()){
+                $unique_data = array_intersect_key($data, array_flip($this->table->get_unique_keys()));
+
+                $data_format = array_intersect_key($this->table->get_db_format(), $unique_data);
+                ksort($data_format);
+                ksort($unique_data);
+                $sql_where[] = urldecode(http_build_query($data_format,'',' OR '));
+                $values = array_merge($values, array_values($unique_data));
+            }
+
+            // paired unique keys
+            if($this->table->get_unique_key_pairs()){
+                foreach($this->table->get_unique_key_pairs() as $i=>$pair){
+                    $inters = array_intersect_key($data, array_flip($pair));
+                    if(count($pair) == count($inters)){
+
+                        // get format
+                        $format = array_intersect_key($this->table->get_db_format(), $inters);
+
+                        ksort($format);
+                        ksort($inters);
+
+                        // build sql: (key1 = %s AND key2 = %d)
+                        $sql_where[] = '('.urldecode(http_build_query($format,'',' AND ')).')';
+
+                        // store values
+                        $values = array_merge($values, array_values($inters));
+                    }
+                }
+            }
+
+
+        }
+
+        // build string
+        $sql_string = implode(' OR ', array_filter($sql_where));
+        return array($sql_string, $values);
 
     }
 
@@ -162,96 +227,64 @@ abstract class DBObjectInterface extends Utils{
         return !empty($this->properties);
     }
 
-    /*
+    /**
      * Check if entry exists. Either by single unique key+value or by unque key-pair
+     * @param array $data the entry, if it exists
+     * @return bool false, if no matching entry exists
+     * @throws \Exception if multiple entries with unique values exist
      */
     public function exists(array $data){
 
         // sanitation
-        $data = $this->table->validator->sanitize($data, 'exists');
+        $data = $this->table->validator->sanitize($data, 'get');
 
         // validation
-        $result = $this->table->validator->validate('exists', $data);
+        $result = $this->table->validator->validate('get', $data);
         if($result === false){
             return false;
         }
 
-        $data = array_intersect_key($data, $this->table->get_db_format());
+        // where
+        $where = $this->sql_unique_where($data);
 
-        global $wpdb;
-
-        if(count($data) == 1 && $unique = $this->table->get_unique_keys()){
-
-            $data = array_intersect_key($data, array_flip($unique));
-            if(empty($data)){
-                throw \Exception('No valid search value given.');
-            }
-            $data_format = array_intersect_key($this->table->get_db_format(), $data);
-            $data_format = array_values($data_format);
-
-            // form sql by merging key and formats
-            $sql_where = urldecode(http_build_query($data_format,'',' OR '));
-
-            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $data);
-            $result = $wpdb->get_results( $sql );
-
-            // return if results with same unique key values were found
-            if(!empty($result)){
-                return true;
-            }
-
-            return false;
-
-        }elseif(count($data) > 1){
-
-            $intersect = false;
-            foreach($this->table->get_unique_key_pairs() as $pairs){
-                if(count($data) == count(array_intersect_key($data, $pairs))){
-                    $intersect = true;
-                    break;
-                }
-            }
-
-            if(!$intersect){
-                throw \Exception('No valid search value given.');
-            }
-
-            $data_format = array_intersect_key($this->table->get_db_format(), $data);
-            $data_format = array_values($data_format);
-
-            // form sql by merging key and formats
-            $sql_where = urldecode(http_build_query($data_format,'',' AND '));
-
-            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $data);
-            $result = $wpdb->get_results( $sql );
-
-            // return if results with same unique key values were found
-            if(!empty($result)){
-                return true;
-            }
-
-            return false;
-
-        }else{
-            throw \Exception('No search value given');
+        if(!$where[0]){
+            throw new \Exception('No unique search values given.');
         }
 
+        global $wpdb;
+        $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$where[0], $where[1]);
+        $results = $wpdb->get_results( $sql );
+
+        if(empty($results)){
+            return false;
+        }elseif(count($results) == 1){
+            return $results[0];
+        }else{
+            throw new \Exception('Database has multiple unique entries.');
+        }
     }
+
+
 
     /*
      * extracts a unique primary key/keypair data set from $data
      */
-    public function unique_identifier_values($data){
-        $data = array_intersect_key($this->table->get_unique_keys(), $data);
-        if(empty($data)){
+    public function extract_unique_identifier_values($data, $pairs = false){
+
+        $output = array();
+
+        if($pairs == false && $this->table->get_unique_keys()){
+            return array_intersect_key($data, array_flip($this->table->get_unique_keys()));
+        }elseif($pairs == true && $this->table->get_unique_key_pairs()){
             foreach($this->table->get_unique_key_pairs() as $pair){
-                if($intersection = array_intersect_key($pair, $data)){
-                    $data = $intersection;
-                    break;
+                $inters = array_intersect_key($data, array_flip($pair));
+                if(count($pair) == count($inters)){
+                    $output[] =  $inters;
                 }
             }
         }
-        return $data;
+
+        return $output;
     }
 
     /**
@@ -262,56 +295,19 @@ abstract class DBObjectInterface extends Utils{
      * @throws \Exception if input key(s) are not a unique identifier
      */
     public function load(array $fields, array $return_keys = array()){
-        /*
-         * success: true
-         * fail: false
-         */
 
-        // sanitation
-        $fields = $this->table->validator->sanitize($fields, 'get_single');
+        $obj = $this->exists($fields);
 
-
-        // check if unique key/value pairs are present
-        $fields = $this->unique_identifier_values($fields);
-        if(empty($fields)){
-            throw new \Exception("Objects can only loaded from a unique identifier e.g. primary key or unique key pairs");
-        }
-
-        // validation
-        $result = $this->table->validator->validate('load', $fields);
-        if($result === false){
+        if($obj == false){
             return false;
-        }
-
-        // get overlapping db_key => db_format array
-        $value_format = array_intersect_key($this->table->get_db_format(), $fields);
-
-        // sort both values and format by keys
-        ksort($fields);
-        ksort($value_format);
-
-        // form sql by merging key and formats
-        $sql_where = urldecode(http_build_query($value_format,'',' AND '));
-        $values = array_values($fields);
-
-        // perform query
-        global $wpdb;
-
-        $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql_where, $values);
-        $result = $wpdb->get_row($sql, ARRAY_A, 0);
-
-        if($result !== NULL){
-
-            $this->properties = $result;
-
+        }else{
+            $this->properties = (array) $obj;
             if(!empty($return_keys)){
-                $this->get($return_keys);
+                return $this->get($return_keys);
             }else{
                 return true;
             }
         }
-
-        return false;
 
     }
 
@@ -358,7 +354,7 @@ abstract class DBObjectInterface extends Utils{
     /**
      * @param array $data   data format: array($key => $value)
      * @param null $where   where format: array($key => $value)
-     * @return bool         1: success, 0: nothing updated, false: fail
+     * @return bool         1: success, 0: nothing updated, false: fail/entry does not exist
      * @throws \Exception
      */
     public function update(array $data, $where = null){
@@ -366,34 +362,17 @@ abstract class DBObjectInterface extends Utils{
         // object must be loaded if no search is available
         if($where === null){
             $this->loaded();
-        }else{
-            // extract unique key/value pairs
-            $where = $this->unique_identifier_values($where);
-            if(empty($where)){
-                throw new \Exception("Objects can only be loaded from a unique identifier e.g. primary key or unique key pairs");
-            }
         }
 
         // sanitation
         $data = $this->table->validator->sanitize($data, 'update_data');
-        if($where !== null){
-            $where = $this->table->validator->sanitize($where, 'update_where');
-            if(empty($where)){
-                throw new \Exception("No correct WHERE in UPDATE clause.");
-            }
-        }
 
         // validation
         $result = $this->table->validator->validate('update_data', $data);
         if($result === false){
             return false;
         }
-        if($where !== null){
-            $result = $this->table->validator->validate('update_where', $where);
-            if($result === false){
-                return false;
-            }
-        }
+
 
         // data binding
         $result = $this->execute_bound_actions('update_before', $data, $where);
@@ -404,24 +383,29 @@ abstract class DBObjectInterface extends Utils{
         // filter update values
         $data = array_intersect_key($data, $this->table->get_db_format());
         if(empty($data)){return false;}
-        $value_format = array_intersect_key($data, $this->table->get_db_format());
+        $value_format = array_intersect_key($this->table->get_db_format(), $data);
 
         // sort values and format
         ksort($data);
         ksort($value_format);
-        $data = array_values($data);
         $value_format = array_values($value_format);
 
+        // where
+        // todo: use sql_unique_where()
+        $pk = $this->table->get_db_primary_key();
         if($where !== null){
-            $where_format = array_intersect_key($where, $this->table->get_db_format());
-            ksort($where);
-            ksort($where_format);
-            $where_format = array_values($where_format);
+            $obj = $this->exists($where);
+            if($obj == false){
+                return false;
+            }else{
+                $pk_val = $obj[$pk];
+            }
         }else{
-            $pk = $this->table->get_db_primary_key();
-            $where = array($pk, $this->get($pk));
-            $where_format = array($this->table->get_db_format($pk));
+            $pk_val = $this->get($pk);
         }
+
+        $where = array($pk => $pk_val);
+        $where_format = array($this->table->get_db_format($pk));
 
         // perform update
         global $wpdb;
@@ -433,10 +417,15 @@ abstract class DBObjectInterface extends Utils{
             $where_format   // where format
         );
 
+        if($success === false){
+            throw new \Exception("An error occurred during the update.");
+        }
+
         $result =  $this->execute_bound_actions('update_after', $data, $success);
         if($result === false){
             return false;
         }
+
 
         if($success === 1){
             // update object properties
@@ -453,12 +442,6 @@ abstract class DBObjectInterface extends Utils{
         // object must be loaded if no search is available
         if($where === null){
             $this->loaded();
-        }else{
-            // extract unique key/value pairs
-            $where = $this->unique_identifier_values($where);
-            if(empty($where)){
-                throw new \Exception("Objects can only be deleted from a unique identifier e.g. primary key or unique key pairs");
-            }
         }
 
         // sanitation
@@ -477,30 +460,36 @@ abstract class DBObjectInterface extends Utils{
             }
         }
 
+        $where_sql = '';
+        $where_values = array();
+
         // get where format
         if($where !== null){
-            $where_format = array_intersect_key($where, $this->table->get_db_format());
-            ksort($where);
-            ksort($where_format);
-            $where_format = array_values($where_format);
+            $extract = $this->sql_unique_where($where);
+            $where_sql = $extract[0];
+            $where_values = $extract[1];
+
+            if(empty($where_sql)){
+                throw new \Exception("Objects can only be deleted from a unique identifier e.g. primary key or unique key pairs");
+            }
+
         }else{
+            // delete from instance data
             $pk = $this->table->get_db_primary_key();
-            $where = array($pk, $this->get($pk));
-            $where_format = array($this->table->get_db_format($pk));
+            $where_sql = $pk.'='.$this->table->get_db_format($pk);
+            $where_values = $this->get($pk);
         }
 
         // data binding
-        $result = $this->execute_bound_actions('delete_before', $where, $where_format);
+        $result = $this->execute_bound_actions('delete_before', $where_sql, $where_values);
         if($result === false){
             return false;
         }
 
         // delete entry
         global $wpdb;
-        $success = $wpdb->delete(
-                        $this->table->get_db_table_name(),
-                        $where,
-                        $where_format);
+        $sql = $wpdb->prepare('DELETE FROM '.$this->table->get_db_table_name().' WHERE '.$where_sql, $where_values);
+        $success = $wpdb->query($sql);
 
         // unset properties to ensure no further manipulations
         if($success === 1){
@@ -517,17 +506,12 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
-     * @param array $data Data format: array of 'col_name' => 'col_value' tuples
-     * @return mixed False: Entry could not be inserted, 1: Successfully inserted
+     * @param array $data data with format: array('col1'=>'col1val', 'col2'=>'col2val')
+     * @param bool $force_reload whether to update the object representation with the inserted values
+     * @return bool 1 on success, false if entry could not be inserted
+     * @throws \Exception if invalid input values are given
      */
     public function insert(array $data, $force_reload = true){
-
-        // validate input arguments
-        $data = $this->table->validate($data, 'insert');
-        if($data === false){
-            $this->add_emsg('insert', 'The input data validation failed.');
-            return false;
-        }
 
         // sanitation
         $data = $this->table->validator->sanitize($data, 'insert');
@@ -544,54 +528,32 @@ abstract class DBObjectInterface extends Utils{
             return false;
         }
 
-        // get values
+        // extract valid data columns
         $data = array_intersect_key($data, $this->table->get_db_format());
-        $value_format = array_intersect_key($this->table->get_db_format(), $data);
 
         if(empty($data)){
             throw new \Exception('No valid input data.');
         }
 
+        // check if entries with same unique key (apart from the primary keys) values exist
+        $exists = $this->exists($data);
+
+        if($exists){
+            return false;
+        }
+
+        $value_format = array_intersect_key($this->table->get_db_format(), $data);
+
         ksort($value_format);
-        ksort($values);
+        ksort($data);
 
         $value_format = array_values($value_format);
 
         global $wpdb;
 
-        // check if entries with same unique key (apart from the primary keys) values exist
-        $unique = $this->table->get_unique_keys();
-        if(!empty($unique)){
-
-            $unique_values = array_intersect_key($values, array_flip($unique));
-            $unique_values_format = array_intersect_key($value_format, array_flip($unique));
-
-            // search for equal entries
-            $unique_values = array_values($unique_values);
-
-            // form sql by merging key and formats
-            $sql_where = urldecode(http_build_query($unique_values_format,'',' OR '));
-
-            $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$sql_where, $unique_values);
-            $res = $wpdb->get_results( $sql );
-
-            // return if results with same unique key values were found
-            if(!empty($res)){
-                //$this->add_error_msg('insert', 'An entry with the same unique keys already exists.');
-                return false;
-            }
-        }
-
-        $unique_pairs = $this->table->get_unique_key_pairs();
-        if(!empty($unique_pairs)){
-
-            // todo: implement unique key pairs
-
-        }
-
         $success = $wpdb->insert(
             $this->table->get_db_table_name(),
-            $values,
+            $data,
             $value_format
         );
 
@@ -606,7 +568,7 @@ abstract class DBObjectInterface extends Utils{
             $this->load(array($this->table->get_db_primary_key() => $wpdb->insert_id));
         }
 
-        return $result;
+        return $success;
 
     }
 
@@ -962,6 +924,12 @@ class Validator{
         foreach($validation_rules as $field_name => $rules){
             $this->$validation_rules[$field_name] = explode('|', $rules);
         }
+
+        // copy validation rules
+        foreach($sanitation_rules as $field_name => $rules){
+            $this->$sanitation_rules[$field_name] = explode('|', $rules);
+        }
+
     }
 
     public function get_errors(){
@@ -970,7 +938,13 @@ class Validator{
 
     public function sanitize(array $data, $context = null){
 
+        if(empty($this->sanitation_rules)){
+            return $data;
+        }
+
         foreach($data as $field_name => $value){
+
+
             if(array_key_exists($field_name, $this->sanitation_rules)){
                 foreach($this->sanitation_rules[$field_name] as $rule){
 
@@ -1012,6 +986,10 @@ class Validator{
 
         // clear errors
         $this->errors = array();
+
+        if(!$this->validation_rules){
+            return true;
+        }
 
         foreach($data as $field_name => $value){
             if(array_key_exists($field_name, $this->validation_rules)){
@@ -1245,6 +1223,10 @@ abstract class DBTable{
         $this->db_table_name = $this->define_db_table_name();
         $this->db_format = $this->define_db_format();
 
+        // define unique keys and key pairs
+        $this->unique_keys = $this->define_unique_keys();
+        $this->unique_key_pairs = $this->define_unique_key_pairs();
+
         // validation and sanitation
         $this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
     }
@@ -1302,52 +1284,6 @@ abstract class DBTable{
     }
 }
 
-class TableInstaller{
 
-    // install db tables
-    // remember, use: register_activation_hook
-
-    public function install($table_classes){
-        if(is_array($table_classes)){
-
-        }else{
-
-        }
-
-
-        global $wpdb;
-
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-
-        //create the name of the table including the wordpress prefix (wp_ etc)
-        $search_table = self::settings('table_name_files');
-
-        //check if there are any tables of that name already
-        if($wpdb->get_var("show tables like '$search_table'") !== $search_table)
-        {
-            $sql =  "CREATE TABLE ". $search_table . " (
-					 `file_id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					 `file_name` varchar(255) COLLATE utf8mb4_unicode_ci COMMENT 'name of the file',
-					 `file_description` TEXT COLLATE utf8mb4_unicode_ci COMMENT 'file description',
-					 `rel_path` VARCHAR(255) NOT NULL UNIQUE COMMENT 'file path relative to the upload dir incl filename',
-					 `file_size` bigint(20) UNSIGNED NOT NULL COMMENT 'file size in byte',
-					 `mime_type` varchar(255) NOT NULL,
-					 `author` bigint(20) NOT NULL COMMENT 'uploader id',
-					 `upload_date` bigint(20) UNSIGNED NOT NULL COMMENT 'unix timestamp of the upload',
-					 PRIMARY KEY (`file_id`)
-					) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci COMMENT='Uploaded files';";
-
-            dbDelta($sql);
-        }
-    }
-    public function clear($table_classes){
-
-    }
-    public function uninstall($table_classes){
-
-
-    }
-
-}
 
 ?>

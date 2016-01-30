@@ -60,8 +60,68 @@ class TestItem extends DBObjectInterface{
 	protected function define_db_table(){
         return new TestTable();
     }
+
+    protected function define_data_binding(){
+        // placeholder function
+        // use bind_action here to define the data binding
+
+        $this->bind_action('insert_before', 'bound_insert');
+        $this->bind_action('delete_before', 'bound_delete');
+    }
+
+
+    protected function bound_insert($data, $where){
+        echo '<br><b>bound_insert:</b><br>';
+        var_dump($data);
+    }
+    protected function bound_delete($where){
+
+        echo '<br><b>bound_delete:</b><br>';
+        var_dump($where);
+    }
+
 	
 }
+
+class BoundTestTable extends DBTable{
+
+    /* define required fields */
+    protected function define_db_table_name(){
+        return 'db_connector_test_bound';
+    }
+    protected function define_db_format(){
+        return array(
+            'id' => '%d',
+            'id_nummer' => '%d'
+        );
+    }
+    protected function define_db_primary_key(){
+        return 'id';
+    }
+
+    /* unique keys or key-pairs */
+    protected function define_unique_keys(){
+        return array('id_nummer');
+    }
+
+    /* validation and sanitation */
+    protected function define_validation_rules(){
+        return array(
+            'id_nummer' => 'integer|required:insert'
+        );
+    }
+
+}
+
+
+class BoundTestItem extends DBObjectInterface{
+
+    protected function define_db_table(){
+        return new BoundTestTable();
+    }
+
+}
+
 
 class TableInstaller{
 
@@ -273,10 +333,10 @@ class WPDBCTest{
 		$result = $item->insert(array(
 			'name'=>'Muster',
 			'vorname'=>'Hans',
-			'alter'=> '22',
+			'alter'=> 22,
 			'id_nummer' => 4444
 		));
-		
+
 		echo '<strong>Item inserted:</strong> '.($result === false?'NO': 'YES').'<br>';
 		
 		// check if exists: unique key

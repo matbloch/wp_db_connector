@@ -67,15 +67,14 @@ abstract class Utils{
 
         if(!empty($this->bound_callbacks[$context])){
             krsort($this->bound_callbacks[$context]);
+
             foreach($this->bound_callbacks[$context] as $binding){
-
                 $result = $this->$binding[0]($data, $args);
-
                 if($result === false && $binding[1] === true){
                     //$this->add_emsg($context, 'The bound function "'.$binding[0].'" returned false.');
                     // force parent function to return false
                     return false;
-                }else{
+                }elseif($result !== null){
                     // if the function returns something - save to the input
                     $data = $result;
                 }
@@ -524,6 +523,7 @@ abstract class DBObjectInterface extends Utils{
         if($result === false){
             return false;
         }
+
 
         // extract valid data columns
         $data = array_intersect_key($data, $this->table->get_db_format());

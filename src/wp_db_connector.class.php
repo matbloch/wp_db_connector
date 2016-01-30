@@ -1270,10 +1270,10 @@ abstract class DBTable{
     }
 
     protected function define_validation_rules(){
-        return array(array());
+        return array();
     }
     protected function define_sanitation_rules(){
-        return array(array());
+        return array();
     }
 
     /* getters */

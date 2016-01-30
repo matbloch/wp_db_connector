@@ -1,8 +1,6 @@
 <?php
 
-// include class
-include('wp_db_connector.class.php');
-
+namespace wpdbc;
 
 // create table
 class TestTable extends DBTable{
@@ -51,6 +49,15 @@ class TestItem extends DBObjectInterface{
         return new TestTable();
     }
 	
+    protected function define_unique_key_pairs(){
+        return array(
+			array('vorname', 'name');
+		);
+    }
+    protected function define_unique_keys(){
+        return array('id_nummer', 'id');
+    }
+	
 }
 
 
@@ -92,17 +99,38 @@ class WPDBCTest{
 		
 		$this->start_msg('test_direct_manipulation');
 		
-		// load from coupled key
-		$result = $item->load(array(
+		// insert new
+		$result = $item->insert(array(
+			'name'=>'Muster',
+			'vorname'=>'Hans',
+			'alter'=> '22',
+			'id_nummer' => 234234
+		));
+		
+		
+		// get value
+		echo '<strong>$item->get(alter):</strong> '.$item->get('alter').'<br>';
+		
+		
+		// update
+		$result = $item->update(array(
+			'alter' => 55
+		));
+		
+		
+		echo '<strong>$item->get(alter):</strong> '.$item->get('alter').'<br>';
+		
+		// delete
+		$result = $item->delete();
+		
+		
+		// check if exists
+		$result = $item->exists(array(
 			'name'=>'Muster',
 			'vorname'=>'Hans'
 		));
 		
-		// get value
-		echo '<strong>$item->get('vorname'):</strong> '.$item->get('vorname').'<br>';
-		
-		// delete
-		$item->delete();
+		echo '<strong>Testitem exits:</strong> '.$result.'<br>';
 	}
 	
 	public function test_coupled_key_item(){
@@ -270,11 +298,5 @@ class WPDBCTest{
 }
 
 
-$test = new WPDBCTest();
-
-$test->test_coupled_key_item();
-$test->test_unique_key_item();
-$test->test_validation();
-$test->test_sanitation();
 
 ?>

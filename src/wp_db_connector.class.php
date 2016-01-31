@@ -144,6 +144,10 @@ abstract class DBObjectInterface extends Utils{
      */
     abstract protected function define_db_table();
 
+    /**
+     * Defines data binding by making calls to the bind_cation method
+     * @return void
+     */
     protected function define_data_binding(){
         // placeholder function
         // use bind_action here to define the data binding
@@ -162,7 +166,6 @@ abstract class DBObjectInterface extends Utils{
         $this->define_data_binding();
 
         // todo: initiation from values
-
     }
 
     /**
@@ -600,28 +603,58 @@ abstract class DBObjectInterface extends Utils{
 
 abstract class DBObjectsHandler extends Utils{
 
+
+    // todo: delete
     private $and;       // the common search property
     private $or;        // the common search property
-    private $objects;   // the loaded objects
+
+
+
+    private $objects;    // the loaded objects
+
+    // identifier for the currently queried objects
+    private $sql_where;
+    private $where_values;
+    private $grouped_by; // column name used to group $objects
+    private $limit;
+    private $offset;
+
 
     public $table;      // db setup of type DBTable, inherit public access
 
-    public function __construct()
-    {
 
-        if(!is_subclass_of($this->define_db_table(), '\wpdc\DBTable')){
-            throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
-        }
-
-        $this->table = $this->define_db_table();
-
-    }
-
-    // set the db table
+    /**
+     * @return DBTable Extended Database Table object instance
+     */
     abstract protected function define_db_table();
     abstract protected function define_order();
 
-    // checks if data is loaded
+    /**
+     * Defines data binding by making calls to the bind_cation method
+     * @return void
+     */
+    protected function define_data_binding(){
+        // placeholder function
+        // use bind_action here to define the data binding
+    }
+
+    public function __construct()
+    {
+        // create corresponding db table instance
+        $this->table = $this->define_db_table();
+
+        if(!is_subclass_of($this->table, 'wpdbc\DBTable')){
+            throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
+        }
+
+        // define the data binding
+        $this->define_data_binding();
+    }
+
+    /**
+     * Checks if any objects are loaded
+     * @throws \Exception if no objects are loaded
+     */
     public function loaded(){
         if(empty($this->objects)){
             throw new \Exception('No objects are loaded.');
@@ -629,77 +662,85 @@ abstract class DBObjectsHandler extends Utils{
     }
 
     /**
-     * @param $fields array('fieldname'=>array(), 'field2' => 'val2') - array: or
-     * @return bool
+     * removes sub-arrays from input data and returns them
+     * @param $data array input data
+     * @return array sub-arrays in input data
      */
-    private function prepare_sql_where($fields){
+    public function extract_or_fields(&$data){
 
-        ksort($fields);
+        $or = array();
+        foreach($data as $i=>&$field){
+            if(is_array($field)) {
+                $or[$i] = $field;
+                unset($data[$i]);
+            }
+        }
+        return $or;
+    }
 
-        // load from additional information
+
+    /**
+     * Generates a valid (no validation/sanitation, available columns) WHERE query for the input data
+     * @param $data array format: array('col1'=>'val1', 'col2'=>array('or_val1', 'or_val2'))
+     * @param string $relation relation between the data (AND/OR)
+     * @return array|bool false if no valid columns. array('sql'=>string $where_sql, 'values'=>array $data)
+     * @throws \Exception if invalid relation specified
+     */
+    private function prepare_sql_where($data, $relation = 'AND'){
+
+        $relation = strtolower($relation);
+        if($relation != 'and' || $relation != 'or'){
+            throw new \Exception('Invalid relation specified: '.$relation);
+        }
+
         $keys_and = array();
         $keys_or = array();
 
-        $or_fields = $this->extract_or_fields($fields);
+        // extract OR conditions
+        $or_data = $this->extract_or_fields($data);
 
-        // get overlapping db_key => db_format array
-        $keys_and = array_intersect_key($this->table->get_db_format(), $fields);
-        $keys_or = array_intersect_key($this->table->get_db_format(), $or_fields);
+        // extract valid fields
+        $format_and = array_intersect_key($this->table->get_db_format(), $data);
+        $format_or = array_intersect_key($this->table->get_db_format(), $or_data);
 
         // do not execute query if no arguments given
-        if(empty($keys_and) && empty($keys_or)){
-            return false;
-        }
-
-        // validate 'or' fields
-        foreach($or_fields as $col=>$group){
-            foreach($group as $val){
-                if($this->table->validate(array($col=>$val), 'load') === false){
-                    return false;
-                }
-            }
-        }
-
-        // validate normal fields
-        if($this->table->validate($fields, 'load') === false){
+        if(empty($format_and) && empty($format_or)){
             return false;
         }
 
         // sort by keys
-        ksort($keys_and);
-        ksort($keys_or);
+        ksort($format_and);
+        ksort($format_or);
 
-        // form sql by merging key and formats
-        $sql_where = urldecode(http_build_query($keys_and,'',' AND '));
-
-        $sql_or = '';
-
-        foreach($keys_or as $key => $format){
-
-            $nr_conditions = count($or_fields[$key]);
-
-            if($nr_conditions > 0){
-                $sql_or = $key.' = '.$format;
-                $sql_or = $sql_or.str_repeat(' OR '.$sql_or, $nr_conditions-1);
-
-                // append to main sql
-                if($sql_where != ''){
-                    $sql_where .= ' AND ';
-                }
-                $sql_where .= '('.$sql_or.')';
-            }
-
-        }
-
-        // order
-        // get available values (compare input keys to reference)
-        $and_values = array_intersect_key($fields, $this->table->get_db_format());
-        $or_values = array_intersect_key($or_fields, $this->table->get_db_format());
+        // extract corresponding values
+        $and_values = array_intersect_key($data, $this->table->get_db_format());
+        $or_values = array_intersect_key($or_data, $this->table->get_db_format());
 
         ksort($and_values);
         ksort($or_values);
 
-        // flatten them
+        // build sql string
+        $sql_where = '';
+        $sql_array = array();
+
+        if($format_and){
+            // form sql by merging key and formats
+            $sql_array[] = urldecode(http_build_query($format_and,'',' AND '));
+        }
+
+        // $or data always contains array of more than one value
+        foreach($or_data as $col_name=>$values){
+
+            $format = $format_or[$col_name];
+            $or = $col_name.' = '.$format;
+            // repeat OR condition for same key = format
+            $sql_array[] = '('.$or.str_repeat(' OR '.$or, count($values)-1).')';
+        }
+
+        // form string
+        $sql_where = implode(' '.$relation.' ', $sql_array);
+
+        // merge values
         $and_values = array_values($and_values);
         if(!empty($or_values)){
             $or_values = call_user_func_array('array_merge', $or_values);
@@ -709,59 +750,126 @@ abstract class DBObjectsHandler extends Utils{
 
     }
 
-    public function load(array $fields){
+    /**
+     * Load objects specified by search data
+     * @param array $fields_and search data with 'AND' relation
+     * @param array $fields_or search data with 'OR' relation
+     * @return bool whether search was performed or not
+     * @throws \Exception if invalid search data supplied
+     */
+    public function load(
+        array $fields_and,
+        array $fields_or = array(),
+        $args = array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
+    ){
 
-        if(!$where = $this->prepare_sql_where($fields)){
-            return false;
+        $where_and = $this->prepare_sql_where($fields_and, 'AND');
+        $where_or = $this->prepare_sql_where($fields_or, 'OR');
+
+        if(!$where_and && $where_or){
+            throw new \Exception('Invalid search data.');
         }
 
-        // todo: remove duplicate code
-        ksort($fields);
+        $sql = array();
+        $values = array();
 
-        // load from additional information
-        $keys_and = array();
-        $keys_or = array();
+        if($where_and){
+            $sql[] = '('.$where_and['sql'].')';
+            $values = array_merge($values, $where_and['values']);
+        }
+        if($where_or){
+            $sql[] = '('.$where_or['sql'].')';
+            $values = array_merge($values, $where_or['values']);
+        }
 
-        $or_fields = $this->extract_or_fields($fields);
+        $sql = implode(' AND ', $sql);
 
-        // get overlapping db_key => db_format array
-        $keys_and = array_intersect_key($this->table->get_db_format(), $fields);
-        $keys_or = array_intersect_key($this->table->get_db_format(), $or_fields);
+        global $wpdb;
+
+        // group by
+        if(isset($args['group_by']) && $args['group_by'] !== null){
+            if($this->table->get_db_format($args['group_by'])){
+                $sql .= ' GROUP BY %s';
+            }
+            $sql = $wpdb->prepare($sql, $args['group_by']);
+        }
+
+        // limit number of results
+        if(isset($args['limit']) && $args['limit'] !== -1){
+            $sql .= ' LIMIT %d';
+            $sql = $wpdb->prepare($sql, $args['limit']);
+        }
+
+        // offet
+        if(isset($args['offset']) && $args['offset'] !== 0){
+            $sql .= ' OFFSET %d';
+            $sql = $wpdb->prepare($sql, $args['offset']);
+        }
 
         // perform query
-        global $wpdb;
-        $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$where['sql'], $where['values']);
-
+        $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql, $values);
         $result = $wpdb->get_results($sql);
 
         if($result !== NULL){
-            $this->and = $fields;
-            $this->or = $or_fields;
             $this->objects = $result;
+            if($group_by !== null){
+                $this->grouped_by = $group_by;
+            }
             return true;
         }
 
         return false;
     }
 
-    public function load_all($group_by = ''){
+
+    /**
+     * Loads all table entries into the object
+     * @param array $args array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
+     * @return bool whether search was performed or not
+     */
+    public function load_all(
+        $args = array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
+    ){
 
         // perform query
         global $wpdb;
 
         $sql = "SELECT * FROM ".$this->table->get_db_table_name();
 
-        if($group_by != ''){
-            $cols = $this->table->get_db_format();
-            if(!empty($cols[$group_by])){
-                $sql .= ' GROUP BY '.$group_by;
+        // group by
+        if(isset($args['group_by']) && $args['group_by'] !== null){
+            if($this->table->get_db_format($args['group_by'])){
+                $sql .= ' GROUP BY %s';
             }
+            $sql = $wpdb->prepare($sql, $args['group_by']);
+        }
+        // limit number of results
+        if(isset($args['limit']) && $args['limit'] !== -1){
+            $sql .= ' LIMIT %d';
+            $sql = $wpdb->prepare($sql, $args['limit']);
+        }
+        // offet
+        if(isset($args['offset']) && $args['offset'] !== 0){
+            $sql .= ' OFFSET %d';
+            $sql = $wpdb->prepare($sql, $args['offset']);
         }
 
         $result = $wpdb->get_results($sql);
 
         if($result !== NULL){
             $this->objects = $result;
+
+            // store pagination values
+            if(isset($args['group_by']) && $args['group_by'] !== null){
+                $this->grouped_by = $args['group_by'];
+            }
+            if(isset($args['limit']) && $args['limit'] !== -1){
+                $this->limit = $args['limit'];
+            }
+            if(isset($args['offset']) && $args['offset'] !== 0){
+                $this->offset = $args['offset'];
+            }
+
             return true;
         }
 
@@ -772,16 +880,37 @@ abstract class DBObjectsHandler extends Utils{
      * @param $fields
      * @return bool
      */
-    public function delete($fields){
+    public function delete($fields_and = array(), $fields_or = array()){
 
-        if(!$where = $this->prepare_sql_where($fields)){
-            return false;
+        if($fields_and || $fields_or){
+            $where_and = $this->prepare_sql_where($fields_and, 'AND');
+            $where_or = $this->prepare_sql_where($fields_or, 'OR');
+
+            if(!$where_and && $where_or){
+                throw new \Exception('Invalid search data.');
+            }
+
+            $sql = array();
+            $values = array();
+
+            if($where_and){
+                $sql[] = '('.$where_and['sql'].')';
+                $values = array_merge($values, $where_and['values']);
+            }
+            if($where_or){
+                $sql[] = '('.$where_or['sql'].')';
+                $values = array_merge($values, $where_or['values']);
+            }
+
+            $sql = implode(' AND ', $sql);
         }
 
-        // perform query
-        global $wpdb;
-        $sql = $wpdb->prepare("DELETE FROM ".$this->table->get_db_table_name()." WHERE ".$where['sql'], $where['values']);
+        // delete currently selected objects
 
+        global $wpdb;
+
+        // perform query
+        $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql, $values);
         $result = $wpdb->get_results($sql);
 
         if($result !== NULL){
@@ -896,23 +1025,6 @@ abstract class DBObjectsHandler extends Utils{
     public function edit($data){
         // todo: include additional where condition
 
-
-    }
-
-    /**
-     * @param $fields
-     * @return bool, removes subarrays from search conditions and returns them
-     */
-    public function extract_or_fields(&$fields){
-
-        $or = array();
-        foreach($fields as $i=>&$field){
-            if(is_array($field)) {
-                $or[$i] = $field;
-                unset($fields[$i]);
-            }
-        }
-        return $or;
 
     }
 
@@ -1211,8 +1323,7 @@ class Validator{
 
 /**
  * Used to define table properties
- * SINGLETON - only one instance
- *
+ * Todo: realize as singleton
  * Class DBTable
  * @package wpdbc
  */
@@ -1274,9 +1385,17 @@ abstract class DBTable{
         return null;
     }
 
+    /**
+     * Defines the validation rules
+     * @return array format: array('column_name'=>'rules')
+     */
     protected function define_validation_rules(){
         return array();
     }
+    /**
+     * Defines the sanitation rules
+     * @return array format: array('column_name'=>'rules')
+     */
     protected function define_sanitation_rules(){
         return array();
     }

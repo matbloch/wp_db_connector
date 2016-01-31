@@ -40,8 +40,8 @@ abstract class Utils{
      * To abort the parent function, set $eval_return to true and return false in the bound method
      * @param string $context string context where the queued functions are executed
      * @param string $callback name of the callback function (extended class method) as string
-     * @param bool $eval_return if set to true, the parent function returns false if return is false
-     * @param int $order relative order the function is executed
+     * @param bool $eval_return (optional) if set to true, the parent function returns false if return is false
+     * @param int $order (optional) relative order the function is executed
      * @throws \Exception if callback does not exist
      */
 
@@ -170,7 +170,7 @@ abstract class DBObjectInterface extends Utils{
      * @param array $data associative array with key names equal column names
      * @return array array[0]: SQL WHERE string, array[1]: values
      */
-    public function sql_unique_where(array $data){
+    protected function sql_unique_where(array $data){
 
         $output = array();
         $unique_data = array();
@@ -230,7 +230,10 @@ abstract class DBObjectInterface extends Utils{
 
     }
 
-    // checks if data is loaded
+    /**
+     * To check whether object is loaded or not
+     * @throws \Exception
+     */
     public function loaded(){
         // todo: load from init - check if one of the primary keys is loaded
         if(empty($this->properties)){
@@ -238,14 +241,18 @@ abstract class DBObjectInterface extends Utils{
         }
     }
 
+    /**
+     * To check whether object is loaded or not
+     * @return bool
+     */
     public function is_loaded(){
         return !empty($this->properties);
     }
 
     /**
      * Check if entry exists. Either by single unique key+value or by unque key-pair
-     * @param array $data the entry, if it exists
-     * @return bool false, if no matching entry exists
+     * @param array $data unique identification data
+     * @return mixed row as object or false if entry does not exist
      * @throws \Exception if multiple entries with unique values exist
      */
     public function exists(array $data){
@@ -279,37 +286,16 @@ abstract class DBObjectInterface extends Utils{
         }
     }
 
-    /*
-     * extracts a unique primary key/keypair data set from $data
-     */
-    public function extract_unique_identifier_values($data, $pairs = false){
-
-        $output = array();
-
-        if($pairs == false && $this->table->get_unique_keys()){
-            return array_intersect_key($data, array_flip($this->table->get_unique_keys()));
-        }elseif($pairs == true && $this->table->get_unique_key_pairs()){
-            foreach($this->table->get_unique_key_pairs() as $pair){
-                $inters = array_intersect_key($data, array_flip($pair));
-                if(count($pair) == count($inters)){
-                    $output[] =  $inters;
-                }
-            }
-        }
-
-        return $output;
-    }
-
     /**
      * Load all information into the object. Only possible for unique key/key-pair information.
-     * @param array $fields
-     * @param array $return_keys
-     * @return bool
+     * @param array $data unique search data
+     * @param array $return_keys column values to return on success
+     * @return mixed bool if succeeded or array of data specified in $return_keys
      * @throws \Exception if input key(s) are not a unique identifier
      */
-    public function load(array $fields, array $return_keys = array()){
+    public function load(array $data, array $return_keys = array()){
 
-        $obj = $this->exists($fields);
+        $obj = $this->exists($data);
 
         if($obj == false){
             return false;
@@ -325,8 +311,11 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
-     * @param array $keys
-     * @return bool|object
+     * Get column values from the loaded object interface. Requires a previous load().
+     * @param array $keys array of columns names to return
+     * @return bool|object single value, object with attributes equal to the extracted column names
+     *                     or false if the column names do not exist
+     * @throws \Exception if object is not loaded
      */
     public function get($keys = array()){
 
@@ -365,9 +354,10 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
-     * @param array $data   data format: array($key => $value)
-     * @param null $where   where format: array($key => $value)
-     * @return bool         1: success, 0: nothing updated, false: fail/entry does not exist
+     * Updates the currently loaded object or an object uniquely specified by $where
+     * @param array $data update data with format: array($column_name => $value)
+     * @param array $where (optional) unique identification with format: array($key => $value)
+     * @return bool|integer 1: success, 0: nothing updated, false: fail/entry does not exist
      * @throws \Exception
      */
     public function update(array $data, $where = null){
@@ -463,6 +453,12 @@ abstract class DBObjectInterface extends Utils{
 
     }
 
+    /**
+     * Deletes the loaded object or an object uniquely specified by $where
+     * @param array $where (optional) unique identification with format: array($key => $value)
+     * @return bool|integer 1 on success, false on fail
+     * @throws \Exception If $where is invalid or the object is not loaded
+     */
     public function delete($where = null){
 
         // object must be loaded if no search is available
@@ -532,8 +528,9 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
+     * Inserts a new table row
      * @param array $data data with format: array('col1'=>'col1val', 'col2'=>'col2val')
-     * @param bool $force_reload whether to update the object representation with the inserted values
+     * @param bool $force_reload (optional) whether to update the object representation with the inserted values
      * @return bool 1 on success, false if entry could not be inserted
      * @throws \Exception if invalid input values are given
      */

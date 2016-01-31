@@ -68,7 +68,7 @@ class TestItem extends DBObjectInterface{
         $this->bind_action('delete_before', array($this,'bound_delete'));
     }
 
-    public function bound_insert($data, $where){
+    protected function bound_insert($data, $where){
 
         echo '----------------------------<br>bound action: create bounded item<br>----------------------------<br>';
 
@@ -85,7 +85,7 @@ class TestItem extends DBObjectInterface{
 
         echo '----------------------------<br>';
     }
-    public function bound_delete($where){
+    protected function bound_delete($where){
 
         echo '----------------------------<br>bound action: delete bounded item<br>----------------------------<br>';
 

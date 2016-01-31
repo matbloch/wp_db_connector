@@ -64,23 +64,45 @@ class TestItem extends DBObjectInterface{
     protected function define_data_binding(){
         // placeholder function
         // use bind_action here to define the data binding
-
-        $this->bind_action('insert_before', 'bound_insert');
-        $this->bind_action('delete_before', 'bound_delete');
+        $this->bind_action('insert_before', array($this,'bound_insert'));
+        $this->bind_action('delete_before', array($this,'bound_delete'));
     }
 
+    public function bound_insert($data, $where){
 
-    protected function bound_insert($data, $where){
-        echo '<br><b>bound_insert:</b><br>';
-        var_dump($data);
+        echo '----------------------------<br>bound action: create bounded item<br>----------------------------<br>';
+
+        $bound_item = new BoundTestItem();
+
+        $result = $bound_item->exists($data);
+        echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+
+
+        $result = $bound_item->insert(array('id_nummer'=>$data['id_nummer']));
+
+        $result = $bound_item->exists($data);
+        echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+
+        echo '----------------------------<br>';
     }
-    protected function bound_delete($where){
+    public function bound_delete($where){
 
-        echo '<br><b>bound_delete:</b><br>';
-        var_dump($where);
+        echo '----------------------------<br>bound action: delete bounded item<br>----------------------------<br>';
+
+        $bound_item = new BoundTestItem();
+
+        $result = $bound_item->exists($where);
+        echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+
+        $result = $bound_item->delete($where);
+
+        $result = $bound_item->exists($where);
+        echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+
+        echo '----------------------------<br>';
+
     }
 
-	
 }
 
 class BoundTestTable extends DBTable{
@@ -138,7 +160,7 @@ class TableInstaller{
         $search_table = 'db_connector_test';
 
         //check if there are any tables of that name already
-        if($wpdb->get_var("show tables like 'db_connector_test'") !== $search_table)
+        if($wpdb->get_var("show tables like '".$search_table."'") !== $search_table)
         {
             $sql =  "CREATE TABLE ". $search_table . " (
 					 `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -151,6 +173,20 @@ class TableInstaller{
 					) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci COMMENT='Table Connector test table';";
             dbDelta($sql);
         }
+
+        $search_table = 'db_connector_test_bound';
+
+        //check if there are any tables of that name already
+        if($wpdb->get_var("show tables like '".$search_table."'") !== $search_table)
+        {
+            $sql =  "CREATE TABLE ". $search_table . " (
+					 `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+					 `id_nummer` int(11) UNSIGNED COMMENT 'unique key',
+					 PRIMARY KEY (`id`)
+					) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci COMMENT='Table Connector test table';";
+            dbDelta($sql);
+        }
+
     }
     public function clear($table_classes){
 
@@ -193,7 +229,7 @@ class WPDBCTest{
 	}
 	
 	public function start_msg($msg){
-		echo '-----------------------------<br>Starting: '.$msg.'<br>-----------------------------<br>';
+		echo '-----------------------------<br><span style="color:red;">Starting: '.$msg.'</span><br>-----------------------------<br>';
 		
 	}
 
@@ -352,7 +388,7 @@ class WPDBCTest{
 		));
 		
 		echo '<strong>Loading old Item:</strong> '.($result?'OK':'Not loaded').'<br>';
-		echo '<strong>Old values:</strong> Alter:'.$item->get('alter').' | ID-NR.:'.$item->get('id_nummer').'<br>';
+        echo '<strong>Old values:</strong> '.print_r($item->get(), true).'<br>';
 
 		// update
 		$result = $item->update(array(
@@ -365,7 +401,7 @@ class WPDBCTest{
 		));
 		
 		// get
-		echo '<strong>New values:</strong> Alter:'.$item->get('alter').' | ID-NR.:'.$item->get('id_nummer').'<br>';
+        echo '<strong>New values:</strong> '.print_r($item->get(), true).'<br>';
 		
 
 		// delete from single unique key

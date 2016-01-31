@@ -27,7 +27,10 @@ abstract class Utils{
      * }
      */
 
-    /* data binding and action queuing */
+    /**
+     * data binding and action queuing
+     * @var array({order}=>array($callback, $eval_return))
+     */
     private $bound_callbacks;   // queued action callbacks (definition in class extension through definition method)
 
     /* data-binding/function-binding (permanent, binding evaluated at instance creation) */
@@ -43,7 +46,10 @@ abstract class Utils{
      */
 
     protected function bind_action($context, $callback, $eval_return = false, $order = 0){
-        if(is_callable (array( $this ,  $callback ))){
+        if(
+            (is_array($callback) && is_callable (array( $callback[0] ,  $callback[1] ))) ||
+             is_callable($callback)
+        ){
             if($order == 0){
                 $this->bound_callbacks[$context][] = array($callback, $eval_return);
             }else{
@@ -53,7 +59,11 @@ abstract class Utils{
                 $this->bound_callbacks[$context][$order] = array($callback, $eval_return);
             }
         }else{
-            throw new \Exception("Bound action '$callback' does not exist.");
+            if(is_array($callback)){
+                throw new \Exception("Bound action '$callback[0]' does not exist in '".get_class($callback[1])."'.");
+            }else{
+                throw new \Exception("Bound action '$callback' does not exist.");
+            }
         }
     }
 
@@ -68,8 +78,15 @@ abstract class Utils{
         if(!empty($this->bound_callbacks[$context])){
             krsort($this->bound_callbacks[$context]);
 
-            foreach($this->bound_callbacks[$context] as $binding){
-                $result = $this->$binding[0]($data, $args);
+            foreach($this->bound_callbacks[$context] as $order=>$binding){
+
+                if(is_array($binding[0])){
+                    // class method. First argument is the class reference
+                    $result = $binding[0][0]->$binding[0][1]($data, $args);
+                }else{
+                    $result = $this->$binding[0]($data, $args);
+                }
+
                 if($result === false && $binding[1] === true){
                     //$this->add_emsg($context, 'The bound function "'.$binding[0].'" returned false.');
                     // force parent function to return false
@@ -149,7 +166,7 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
-     * Generates a SQL query string to find a unique entry
+     * Generates a SQL query string to find a unique entry. Does not escape, validate or sanitize data
      * @param array $data associative array with key names equal column names
      * @return array array[0]: SQL WHERE string, array[1]: values
      */
@@ -186,7 +203,9 @@ abstract class DBObjectInterface extends Utils{
             // paired unique keys
             if($this->table->get_unique_key_pairs()){
                 foreach($this->table->get_unique_key_pairs() as $i=>$pair){
+
                     $inters = array_intersect_key($data, array_flip($pair));
+
                     if(count($pair) == count($inters)){
 
                         // get format
@@ -203,8 +222,6 @@ abstract class DBObjectInterface extends Utils{
                     }
                 }
             }
-
-
         }
 
         // build string
@@ -369,6 +386,20 @@ abstract class DBObjectInterface extends Utils{
             return false;
         }
 
+        // sanitation
+        if($where !== null){
+            $where = $this->table->validator->sanitize($where, 'update_where');
+            if(empty($where)){
+                throw new \Exception("No correct WHERE in UPDATE clause.");
+            }
+        }
+        // validation
+        if($where !== null){
+            $result = $this->table->validator->validate('update_where', $where);
+            if($result === false){
+                return false;
+            }
+        }
 
         // data binding
         $result = $this->execute_bound_actions('update_before', $data, $where);
@@ -432,7 +463,6 @@ abstract class DBObjectInterface extends Utils{
 
     }
 
-
     public function delete($where = null){
 
         // object must be loaded if no search is available
@@ -442,7 +472,7 @@ abstract class DBObjectInterface extends Utils{
 
         // sanitation
         if($where !== null){
-            $where = $this->table->validator->sanitize($where, 'delete_where');
+            $where = $this->table->validator->sanitize($where, 'delete');
             if(empty($where)){
                 throw new \Exception("No correct WHERE in DELETE clause.");
             }
@@ -450,10 +480,16 @@ abstract class DBObjectInterface extends Utils{
 
         // validation
         if($where !== null){
-            $result = $this->table->validator->validate('delete_where', $where);
+            $result = $this->table->validator->validate('delete', $where);
             if($result === false){
                 return false;
             }
+        }
+
+        // data binding
+        $result = $this->execute_bound_actions('delete_before', $where);
+        if($result === false){
+            return false;
         }
 
         $where_sql = '';
@@ -474,12 +510,6 @@ abstract class DBObjectInterface extends Utils{
             $pk = $this->table->get_db_primary_key();
             $where_sql = $pk.'='.$this->table->get_db_format($pk);
             $where_values = $this->get($pk);
-        }
-
-        // data binding
-        $result = $this->execute_bound_actions('delete_before', $where_sql, $where_values);
-        if($result === false){
-            return false;
         }
 
         // delete entry
@@ -524,7 +554,6 @@ abstract class DBObjectInterface extends Utils{
             return false;
         }
 
-
         // extract valid data columns
         $data = array_intersect_key($data, $this->table->get_db_format());
 
@@ -555,7 +584,7 @@ abstract class DBObjectInterface extends Utils{
         );
 
         // === data binding
-        $result = $this->execute_bound_actions('insert_after', $values, $success);
+        $result = $this->execute_bound_actions('insert_after', $data, $success);
         if($result === false){
             return false;
         }
@@ -940,7 +969,6 @@ class Validator{
 
         foreach($data as $field_name => $value){
 
-
             if(array_key_exists($field_name, $this->sanitation_rules)){
                 foreach($this->sanitation_rules[$field_name] as $rule){
 
@@ -1237,16 +1265,16 @@ abstract class DBTable{
     /* placeholder functions */
 
     /** Unique field values: crucial for insert/update
-     * @return array
+     * @return array(array())
      */
     protected function define_unique_key_pairs(){
-        return array(array());
+        return null;
     }
     /** Unique field values: crucial for insert/update
      * @return array
      */
     protected function define_unique_keys(){
-        return array();
+        return null;
     }
 
     protected function define_validation_rules(){

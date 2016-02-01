@@ -186,7 +186,7 @@ abstract class DBObjectInterface extends Utils{
 
         // first check for primary key
         $pk = $this->table->get_db_primary_key();
-        if($data[$pk]){
+        if(isset($data[$pk])){
             $data_format = $this->table->get_db_format($pk);
             $sql_where[] = $pk.'='.$data_format;
             $values = array($data[$pk]);
@@ -208,7 +208,6 @@ abstract class DBObjectInterface extends Utils{
                 foreach($this->table->get_unique_key_pairs() as $i=>$pair){
 
                     $inters = array_intersect_key($data, array_flip($pair));
-
                     if(count($pair) == count($inters)){
 
                         // get format
@@ -268,6 +267,8 @@ abstract class DBObjectInterface extends Utils{
         if($result === false){
             return false;
         }
+
+
 
         // where
         $where = $this->sql_unique_where($data);
@@ -583,11 +584,15 @@ abstract class DBObjectInterface extends Utils{
             $value_format
         );
 
+
+
         // === data binding
         $result = $this->execute_bound_actions('insert_after', $data, $success);
         if($result === false){
             return false;
         }
+
+
 
         if($success == 1 && $force_reload == true){
             // reload inserted data. Necessary for default fields
@@ -603,22 +608,14 @@ abstract class DBObjectInterface extends Utils{
 
 abstract class DBObjectsHandler extends Utils{
 
-
-    // todo: delete
-    private $and;       // the common search property
-    private $or;        // the common search property
-
-
-
     private $objects;    // the loaded objects
 
     // identifier for the currently queried objects
     private $sql_where;
     private $where_values;
-    private $grouped_by; // column name used to group $objects
+    private $group_by; // column name used to group $objects
     private $limit;
     private $offset;
-
 
     public $table;      // db setup of type DBTable, inherit public access
 
@@ -659,6 +656,17 @@ abstract class DBObjectsHandler extends Utils{
         if(empty($this->objects)){
             throw new \Exception('No objects are loaded.');
         }
+    }
+
+    public function is_loaded(){
+        return !empty($this->objects);
+    }
+
+    /**
+     * whether a search query has been performed or not (objects might be empty)
+     */
+    public function is_queried(){
+        return !empty($this->sql_where);
     }
 
     /**
@@ -743,6 +751,7 @@ abstract class DBObjectsHandler extends Utils{
         // merge values
         $and_values = array_values($and_values);
         if(!empty($or_values)){
+            // collapse array or values
             $or_values = call_user_func_array('array_merge', $or_values);
         }
 
@@ -754,14 +763,15 @@ abstract class DBObjectsHandler extends Utils{
      * Load objects specified by search data
      * @param array $fields_and search data with 'AND' relation
      * @param array $fields_or search data with 'OR' relation
-     * @return bool whether search was performed or not
+     * @param array $args (optional) additional query pagination parameters
+     * @return bool|int false if query failed or number of search results (including 0)
      * @throws \Exception if invalid search data supplied
      */
     public function load(
         array $fields_and,
         array $fields_or = array(),
         $args = array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
-    ){
+        ){
 
         $where_and = $this->prepare_sql_where($fields_and, 'AND');
         $where_or = $this->prepare_sql_where($fields_or, 'OR');
@@ -811,11 +821,23 @@ abstract class DBObjectsHandler extends Utils{
         $result = $wpdb->get_results($sql);
 
         if($result !== NULL){
+
+            // store query parameters
+            $this->sql_where = $sql;
+            $this->where_values = $values;
             $this->objects = $result;
-            if($group_by !== null){
-                $this->grouped_by = $group_by;
+
+            if($args['group_by'] !== null){
+                $this->group_by = $args['group_by'];
             }
-            return true;
+            if(isset($args['limit']) && $args['limit'] !== -1){
+                $this->limit = $args['limit'];
+            }
+            if(isset($args['offset']) && $args['offset'] !== 0){
+                $this->offset = $args['offset'];
+            }
+
+            return count($result);
         }
 
         return false;
@@ -824,8 +846,8 @@ abstract class DBObjectsHandler extends Utils{
 
     /**
      * Loads all table entries into the object
-     * @param array $args array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
-     * @return bool whether search was performed or not
+     * @param array $args (optional) additional query pagination parameters
+     * @return bool|int false if query failed or number of search results (including 0)
      */
     public function load_all(
         $args = array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
@@ -858,6 +880,8 @@ abstract class DBObjectsHandler extends Utils{
 
         if($result !== NULL){
             $this->objects = $result;
+            $this->where_values = array();
+            $this->sql_where = '1';
 
             // store pagination values
             if(isset($args['group_by']) && $args['group_by'] !== null){
@@ -870,15 +894,17 @@ abstract class DBObjectsHandler extends Utils{
                 $this->offset = $args['offset'];
             }
 
-            return true;
+            return count($result);
         }
 
         return false;
     }
 
     /**
-     * @param $fields
-     * @return bool
+     * @param array $fields_and
+     * @param array $fields_or
+     * @return bool|integer false on fail, or number of affected rows (including 0)
+     * @throws \Exception if invalid search fields or no search terms and no previous search
      */
     public function delete($fields_and = array(), $fields_or = array()){
 
@@ -886,7 +912,7 @@ abstract class DBObjectsHandler extends Utils{
             $where_and = $this->prepare_sql_where($fields_and, 'AND');
             $where_or = $this->prepare_sql_where($fields_or, 'OR');
 
-            if(!$where_and && $where_or){
+            if(!$where_and && !$where_or){
                 throw new \Exception('Invalid search data.');
             }
 
@@ -903,19 +929,39 @@ abstract class DBObjectsHandler extends Utils{
             }
 
             $sql = implode(' AND ', $sql);
-        }
 
-        // delete currently selected objects
+        }else{
+            if(!$this->is_loaded()){
+                if($this->is_queried()){
+                    // queried 0 results
+                    return 0;
+                }else{
+                    $this->loaded();
+                }
+            }
+
+            // delete currently selected objects
+            $sql = $this->sql_where;
+            $values = $this->where_values;
+        }
 
         global $wpdb;
 
         // perform query
-        $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql, $values);
+        $sql = "DELETE FROM ".$this->table->get_db_table_name()." WHERE ".$sql;
+
+        // escape if values are present
+        if($values){
+            $sql = $wpdb->prepare($sql, $values);
+        }
+
         $result = $wpdb->get_results($sql);
 
         if($result !== NULL){
             $this->objects = array();
-            return true;
+            $this->where_values = array();
+            $this->sql_where = '';
+            return $result;
         }
 
         return false;
@@ -938,51 +984,71 @@ abstract class DBObjectsHandler extends Utils{
 
     }
 
-    public function count($group_by, $where = array()){
+    protected function sql_and_or(array $fields_and, $fields_or = array()){
 
-        $col_format = $this->table->get_db_format($group_by);
-        if(empty($col_format)){
-            return false;
+        $where_and = $this->prepare_sql_where($fields_and, 'AND');
+        $where_or = $this->prepare_sql_where($fields_or, 'OR');
+
+        if(!$where_and && !$where_or){
+            throw new \Exception('Invalid search data.');
         }
 
-        // validate where
-        if($this->table->validate(array_values($where), 'count') === false){
-            return false;
+        $sql = array();
+        $values = array();
+
+        if($where_and){
+            $sql[] = '('.$where_and['sql'].')';
+            $values = array_merge($values, $where_and['values']);
+        }
+        if($where_or){
+            $sql[] = '('.$where_or['sql'].')';
+            $values = array_merge($values, $where_or['values']);
         }
 
-        // get overlapping format
-        $format_where = array_intersect_key($this->table->get_db_format(), $where);
+        $sql = implode(' AND ', $sql);
 
-        global $wpdb;
+        return array('sql'=>$sql, 'values', $values);
 
-        if(!empty($format_where)){
+    }
 
-            // extract overlapping where data
-            $where = array_intersect_key($where, $format_where);
+    public function count(
+        array $fields_and,
+        array $fields_or = array(),
+        $args = array('offset'=>0, 'group_by'=>null)
+        ){
 
-            ksort($format_where);
-            ksort($where);
-            $sql_where = urldecode(http_build_query($format_where, '',' AND '));
+        // todo: include group by count items with same column values
 
-            // values to escape
-            $values = array_values($where);
+        if($fields_and || $fields_or){
 
-            // group by column name (select and group by)
-            array_unshift($values, $group_by);
-            array_push($values, $group_by);
+            $where = $this->sql_and_or($fields_and, $fields_or);
 
-            $sql = $wpdb->prepare("SELECT ".$col_format.", COUNT(*) FROM ".$this->table->get_db_table_name()." WHERE ".$sql_where." GROUP BY ".$col_format, $values);
+            // perform query
+            global $wpdb;
+            $sql = "SELECT COUNT(".$this->table->get_db_primary_key().") FROM ".$this->table->get_db_table_name()." WHERE ".$where['sql'];
+
+            // escape if values are present
+            $sql = $wpdb->prepare($sql, $where['values']);
+            $result = $wpdb->get_results($sql);
+
+            if($result !== NULL){
+                return $result;
+            }
+
+            return false;
+
         }else{
-            $sql = $wpdb->prepare("SELECT ".$col_format.", COUNT(*) FROM ".$this->table->get_db_table_name()." GROUP BY ".$col_format, array($group_by,$group_by));
+            if(!$this->is_loaded()){
+                if($this->is_queried()){
+                    // queried 0 results
+                    return 0;
+                }else{
+                    $this->loaded();
+                }
+            }
+
+            return count($this->objects);
         }
-
-        $result = $wpdb->get_results($sql);
-
-        if($result !== NULL){
-            return $result;
-        }
-
-        return false;
 
     }
 
@@ -990,7 +1056,50 @@ abstract class DBObjectsHandler extends Utils{
      * If objects are loaded: update selected group
      * Else: update all entries in db that match the criteria
      */
-    public function multi_update($where, $update){
+    public function multi_update(array $update, $where_and = array(), $where_or = array()){
+
+        // prepare update values
+
+        $update_values = array_intersect_key($update, $this->table->get_db_format());
+        $update_format = array_intersect_key($this->table->get_db_format(), $update);
+
+        if(empty($update_values)){
+            throw new \Exception('Nothing to update.');
+        }
+
+        // build sql
+        $sql_update = urldecode(http_build_query($update_format,'',', '));
+
+        // prepare where
+        if($where_and || $where_or){
+            $where = $this->sql_and_or($where_and, $where_or);
+            $where_sql = $where['sql'];
+            $where_values = $where['values'];
+        }else{
+            if(!$this->is_loaded()){
+                if($this->is_queried()){
+                    // queried 0 results
+                    return 0;
+                }else{
+                    $this->loaded();
+                }
+            }
+            $where_sql = $this->sql_where;
+            $where_values = $this->where_values;
+        }
+
+        global $wpdb;
+        $sql = "UPDATE $this->table->get_db_table_name() SET $sql_update WHERE $where_sql";
+
+        // escape if values are present
+        $sql = $wpdb->prepare($sql, array_merge(array_values($update_values), $where_values));
+        $result = $wpdb->get_results($sql);
+
+        if($result !== NULL){
+            return $result;
+        }
+
+        return false;
 
     }
 

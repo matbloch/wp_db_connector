@@ -70,36 +70,37 @@ class TestItem extends DBObjectInterface{
 
     protected function bound_insert($data, $where){
 
-        echo '----------------------------<br>bound action: create bounded item<br>----------------------------<br>';
+        echo '<br><br>bound action: create bounded item<br>';
+        if(isset($data['id_nummer'])){
+            $bound_item = new BoundTestItem();
 
-        $bound_item = new BoundTestItem();
+            $result = $bound_item->exists($data);
+            echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 
-        $result = $bound_item->exists($data);
-        echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+            $result = $bound_item->insert(array('id_nummer'=>$data['id_nummer']));
+            echo '<strong>Item inserted:</strong> '.($result === false?'NO': 'YES').'<br>';
 
+            $result = $bound_item->exists($data);
+            echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 
-        $result = $bound_item->insert(array('id_nummer'=>$data['id_nummer']));
-
-        $result = $bound_item->exists($data);
-        echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-
-        echo '----------------------------<br>';
+        }
+        echo '<br><br>';
     }
     protected function bound_delete($where){
 
-        echo '----------------------------<br>bound action: delete bounded item<br>----------------------------<br>';
+        echo '<br><br>bound action: delete bounded item<br>';
+        if($where && isset($where['id_nummer'])){
 
-        $bound_item = new BoundTestItem();
+            $bound_item = new BoundTestItem();
 
-        $result = $bound_item->exists($where);
-        echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-
-        $result = $bound_item->delete($where);
-
-        $result = $bound_item->exists($where);
-        echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-
-        echo '----------------------------<br>';
+            $result = $bound_item->exists($where);
+            echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+            $result = $bound_item->delete($where);
+            echo '<strong>Item deleted:</strong> '.($result === false?'NO': 'YES').'<br>';
+            $result = $bound_item->exists($where);
+            echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
+        }
+        echo '<br><br>';
 
     }
 
@@ -214,14 +215,14 @@ class WPDBCTest{
 			'name'=>'Freddy',
 			'vorname'=>'Krueger',
 			'code'=>'#8239709',
-			'alter'=> '22',
+			'alter'=> 22,
 			'id_nummer' => 2543524
 		));
 		// insert item
 		$result = $item->insert(array(
 			'name'=>'Martin',
 			'vorname'=>'Solveign',
-			'alter'=> '54',
+			'alter'=> 54,
             'code'=>'#000382',
 			'id_nummer' => 134523
 		));
@@ -241,27 +242,27 @@ class WPDBCTest{
 	public function test_direct_manipulation(){
 		
 		$this->start_msg('test_direct_manipulation()');
-
         $item = new TestItem();
+
 		// insert new
 		$result = $item->insert(array(
 			'name'=>'Mustermann',
 			'vorname'=>'Max',
-			'alter'=> '35',
+			'alter'=> 35,
 			'id_nummer' => 2464323
-		));
+		), true);
 
-		// get value
+        // get value
         echo '<strong>Old values:</strong> '.print_r($item->get(), true).'<br>';
-		
-		// update
-		$result = $item->update(array(
+
+        // update
+        $result = $item->update(array(
 			'alter' => 55
 		));
 
-        echo '<strong>New values:</strong> '.print_r($item->get(), true).'<br>';
+       echo '<strong>New values:</strong> '.print_r($item->get(), true).'<br>';
 
-		// delete
+        // delete
 		$result = $item->delete();
         echo '<strong>Deleted item:</strong> '.($result?'YES':'NO').'<br>';
 

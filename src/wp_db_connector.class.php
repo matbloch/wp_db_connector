@@ -1141,6 +1141,7 @@ abstract class DBObjectsHandler extends Utils{
 
 class Validator{
 
+    // todo: move to object instance and build singleton DBTable
     protected $errors;   // collects validation errors temporarily
 
     /*

@@ -207,6 +207,16 @@ class WPDBCTest{
 		$this->add_dummy_data();
 	}
 
+    public function object_memory_usage(){
+
+        $before = memory_get_usage();
+        $item = new TestItem();
+        $after = memory_get_usage();
+
+        $kb = round(($after - $before)/1024,2);
+        echo $kb.' kb';
+    }
+
 	public function add_dummy_data(){
 		
 		$item = new TestItem();

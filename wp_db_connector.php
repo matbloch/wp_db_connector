@@ -35,6 +35,8 @@ $test_data = array(
     'id_nummer' => 1214353
 );
 
+
+$test->object_memory_usage();
 /*
 // insert item
 $result = $item->insert(array(

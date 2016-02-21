@@ -58,7 +58,7 @@ class TestTable extends DBTable{
 class TestItem extends DBObjectInterface{
 	
 	protected function define_db_table(){
-        return new TestTable();
+        return 'TestTable';
     }
 
     protected function define_data_binding(){
@@ -137,10 +137,12 @@ class BoundTestTable extends DBTable{
 }
 
 
+
+
 class BoundTestItem extends DBObjectInterface{
 
     protected function define_db_table(){
-        return new BoundTestTable();
+        return 'BoundTestTable';
     }
 
 }
@@ -214,7 +216,13 @@ class WPDBCTest{
         $after = memory_get_usage();
 
         $kb = round(($after - $before)/1024,2);
-        echo $kb.' kb';
+
+        // object size
+        echo 'Instance memory usage: '.$kb.' kb<br>';
+
+        // total peak memory
+        echo 'Peak memory usage: ';
+        echo round(memory_get_peak_usage()/1048576,2).' MB';
     }
 
 	public function add_dummy_data(){

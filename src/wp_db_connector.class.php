@@ -137,10 +137,13 @@ abstract class Utils{
 abstract class DBObjectInterface extends Utils{
 
     private $properties;    // holds the db values of the object
-    public $table;          // db setup of type DBTable, inherit public access
+    /**
+     * @var DBTable Singleton
+     */
+    protected $table;
 
     /**
-     * @return DBTable Extended Database Table object instance
+     * @return string Name of extended Database Table object instance
      */
     abstract protected function define_db_table();
 
@@ -155,8 +158,9 @@ abstract class DBObjectInterface extends Utils{
 
     public function __construct()
     {
-        // create corresponding db table instance
-        $this->table = $this->define_db_table();
+
+        // get table (singleton) instance
+        $this->table = call_user_func(array('wpdbc\\'.$this->define_db_table(), 'getInstance'));
 
         if(!is_subclass_of($this->table, 'wpdbc\DBTable')){
             throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
@@ -166,6 +170,11 @@ abstract class DBObjectInterface extends Utils{
         $this->define_data_binding();
 
         // todo: initiation from values
+    }
+
+    protected function __destruct()
+    {
+        $this->$table = null;
     }
 
     /**
@@ -268,8 +277,6 @@ abstract class DBObjectInterface extends Utils{
             return false;
         }
 
-
-
         // where
         $where = $this->sql_unique_where($data);
 
@@ -311,7 +318,6 @@ abstract class DBObjectInterface extends Utils{
                 return true;
             }
         }
-
     }
 
     /**
@@ -446,7 +452,6 @@ abstract class DBObjectInterface extends Utils{
         if($result === false){
             return false;
         }
-
 
         if($success === 1){
             // update object properties
@@ -584,15 +589,11 @@ abstract class DBObjectInterface extends Utils{
             $value_format
         );
 
-
-
         // === data binding
         $result = $this->execute_bound_actions('insert_after', $data, $success);
         if($result === false){
             return false;
         }
-
-
 
         if($success == 1 && $force_reload == true){
             // reload inserted data. Necessary for default fields
@@ -621,7 +622,7 @@ abstract class DBObjectsHandler extends Utils{
 
 
     /**
-     * @return DBTable Extended Database Table object instance
+     * @return string Class name of extended DBTable Database Table class
      */
     abstract protected function define_db_table();
     abstract protected function define_order();
@@ -637,8 +638,8 @@ abstract class DBObjectsHandler extends Utils{
 
     public function __construct()
     {
-        // create corresponding db table instance
-        $this->table = $this->define_db_table();
+        // get table (singleton) instance
+        $this->table = call_user_func(array('wpdbc\\'.$this->define_db_table(), 'getInstance'));
 
         if(!is_subclass_of($this->table, 'wpdbc\DBTable')){
             throw new \Exception('Illegal class extension. DBObjectInterface method "define_db_table" must return an object of type "DBTable"');
@@ -646,6 +647,12 @@ abstract class DBObjectsHandler extends Utils{
 
         // define the data binding
         $this->define_data_binding();
+
+    }
+
+    protected function __destruct()
+    {
+        $this->$table = null;
     }
 
     /**
@@ -1439,10 +1446,75 @@ class Validator{
  */
 abstract class DBTable{
 
+    /*
+        Usage of extended Class:
+        $db_table = DBTable
+        $db_table->get_db_table_name();
+     */
+
+    /**
+     * @var DBTable The reference to *Singleton* instance of this class
+     */
+    protected static $instance;
+
+    /**
+     * Returns the *Singleton* instance of this class.
+     *
+     * @return DBTable The *Singleton* instance.
+     */
+    public static function getInstance()
+    {
+        if (null === static::$instance) {
+            static::$instance = new static();
+        }
+
+        return static::$instance;
+    }
+
+    /**
+     * Protected constructor to prevent creating a new instance of the
+     * *Singleton* via the `new` operator from outside of this class.
+     */
+    protected function __construct()
+    {
+        // load settings from forced parent setters into properties
+        $this->db_primary_key = $this->define_db_primary_key();
+        $this->db_table_name = $this->define_db_table_name();
+        $this->db_format = $this->define_db_format();
+
+        // define unique keys and key pairs
+        $this->unique_keys = $this->define_unique_keys();
+        $this->unique_key_pairs = $this->define_unique_key_pairs();
+
+        // validation and sanitation
+        $this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
+    }
+
+    /**
+     * Private clone method to prevent cloning of the instance of the
+     * *Singleton* instance.
+     *
+     * @return void
+     */
+    private function __clone()
+    {
+    }
+
+    /**
+     * Private unserialize method to prevent unserializing of the *Singleton*
+     * instance.
+     *
+     * @return void
+     */
+    private function __wakeup()
+    {
+    }
+
     protected $db_table_name;   // holds the db values of the object
     protected $db_primary_key;
     protected $db_format;      // defines the value format for $wpdb escaping
 
+    // todo: move to objectHandler
     public $validator;          // validator object
 
     /*
@@ -1459,21 +1531,6 @@ abstract class DBTable{
      * )
      */
     protected $unique_key_pairs;
-
-    public function __construct()
-    {
-        // load settings from forced parent setters into properties
-        $this->db_primary_key = $this->define_db_primary_key();
-        $this->db_table_name = $this->define_db_table_name();
-        $this->db_format = $this->define_db_format();
-
-        // define unique keys and key pairs
-        $this->unique_keys = $this->define_unique_keys();
-        $this->unique_key_pairs = $this->define_unique_key_pairs();
-
-        // validation and sanitation
-        $this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
-    }
 
     /* forced definitions */
     abstract protected function define_db_table_name();
@@ -1535,7 +1592,6 @@ abstract class DBTable{
         return $this->unique_key_pairs;
     }
 }
-
 
 
 ?>

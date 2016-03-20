@@ -36,7 +36,7 @@ $test_data = array(
 );
 
 
-$test->object_memory_usage();
+//$test->object_memory_usage();
 /*
 // insert item
 $result = $item->insert(array(
@@ -64,4 +64,4 @@ $result = $item->insert(array(
 //$test->test_validation();
 // $test->test_sanitation();
 
-die();
+//die();

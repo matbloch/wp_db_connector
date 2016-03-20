@@ -172,9 +172,9 @@ abstract class DBObjectInterface extends Utils{
         // todo: initiation from values
     }
 
-    protected function __destruct()
+    public function __destruct()
     {
-        $this->$table = null;
+        $this->table = null;
     }
 
     /**

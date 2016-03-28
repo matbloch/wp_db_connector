@@ -268,6 +268,31 @@ class WPDBCTest{
 			'id_nummer' => 134523
 		));
 
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Martin',
+            'age'=> 15,
+        ));
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Andy',
+            'age'=> 45,
+        ));
+        $result = $item->insert(array(
+            'name'=>'Bowie',
+            'vorname'=>'David',
+            'age'=> 45,
+        ));
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Alex',
+            'age'=> 11,
+        ));
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Jason',
+            'age'=> 87,
+        ));
 		
 	}
 	
@@ -494,66 +519,44 @@ class WPDBCTest{
 
         $this->add_dummy_data();
 
-        // item handler
-        $item = new TestItem();
-
-        // insert item
-        $result = $item->insert(array(
-            'name'=>'Warhole',
-            'vorname'=>'Martin',
-            'age'=> 15,
-        ));
-        // insert item
-        $result = $item->insert(array(
-            'name'=>'Warhole',
-            'vorname'=>'Andy',
-            'age'=> 45,
-        ));
-        // insert item
-        $result = $item->insert(array(
-            'name'=>'Bowie',
-            'vorname'=>'David',
-            'age'=> 45,
-        ));
-        $result = $item->insert(array(
-            'name'=>'Warhole',
-            'vorname'=>'Alex',
-            'age'=> 11,
-        ));
-        $result = $item->insert(array(
-            'name'=>'Warhole',
-            'vorname'=>'Jason',
-            'age'=> 87,
-        ));
-
-        $m = new MultiObjectHandler();
-        $m->debugging(true);
+        $h = new MultiObjectHandler();
+        $h->debugging(true);
 
         // load multiple objects
-        $m->load(
+        $h->load(
             array(
-                'name'=>array('Warhole', 'bla'),
+                'name'=>array('Warhole', 'Bowie'),
             ),
            array(
                //'name'=>array('Warhole', 'Bowie', 'Muster'),
                //'vorname'=> 'Martin'
            ),
            array(
-               //'limit' => 5,
-               //'offset' => 0,
+               'limit' => 5,
                'group_by' => 'name'
            )
 
         );
-        $objs = $m->get_objects();
 
-        $m->delete();
+        $familiy_members = $h->get_objects();
+
+        foreach($familiy_members as $f=>$m){
+            echo '<strong>Family '.$f.'</strong><br>';
+            foreach($m as $i){
+                print_r($i);echo '<br>';
+            }
+        }
+
+        $h->delete(
+            array(
+                'vorname' => array('David', 'Alex', 'Jason'),
+                'name' => 'Warhole'
+            )
+        );
 
 
 
     }
 }
-
-
 
 ?>

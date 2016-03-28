@@ -17,7 +17,7 @@
 # Installation
 
 ```php
-include_once wp_db_connector.php
+require_once wp_db_connector.php
 ```
 
 In the following example, an abstraction for a table with name `test_table` is derived.
@@ -333,6 +333,9 @@ The arguments passed to the bounded functions **are always sanitized and validat
 	> Loads all table entries into the object
 	> **@param** array $args (optional) additional query pagination parameters: limit, offset, group_by (column name)
 	> **@return** bool|int false if query failed or number of search results (including 0)
+- `delete`(array **$fields_and**, array **$fields_or**, array **$args**)
+
+
 
 # Usage
 

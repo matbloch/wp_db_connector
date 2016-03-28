@@ -9,11 +9,14 @@
 
 namespace wpdbc;  // db connector
 
+
+
 /**
  * Class Utils
  * @package wpdbc
  * Used in DB Object Interfaces
  */
+if (!class_exists('\wpdbc\Utils')):
 abstract class Utils{
 
     /*
@@ -31,6 +34,9 @@ abstract class Utils{
      * placeholder: implemented in object handlers
      */
     protected $table;
+    /**
+     * @var $debug bool if debugging is active or not
+     */
     protected $debug;
 
     /**
@@ -109,7 +115,9 @@ abstract class Utils{
 
     }
 
-    // stores error messages when a member method returns false
+    /**
+     * @var $errors array stores error messages when a member method returns false
+     */
     private $errors;
 
     /* error handling */
@@ -218,7 +226,14 @@ abstract class Utils{
     }
 
 }
+endif;  // include guard
 
+/**
+ * Class DBObjectInterface
+ * @package wpdbc
+ * Used as object handler for single entries
+ */
+if (!class_exists('\wpdbc\DBObjectInterface')):
 abstract class DBObjectInterface extends Utils{
 
     private $properties;    // holds the db values of the object
@@ -735,20 +750,24 @@ abstract class DBObjectInterface extends Utils{
     }
 
 }
+endif;  // include guard
 
-
+/**
+ * Class DBObjectsHandler
+ * @package wpdbc
+ * Used to load and manipulate multiple database entries
+ */
+if (!class_exists('\wpdbc\DBObjectsHandler')):
 abstract class DBObjectsHandler extends Utils{
 
-    private $objects;    // the loaded objects
+    protected $table;      // db setup of type DBTable, inherit public access
+    private $objects;      // the loaded objects
 
-    // identifier for the currently queried objects
+    // identifiers for the currently queried objects
     private $sql_where;
-    private $where_values;
     private $group_by; // column name used to group $objects
     private $limit;
     private $offset;
-
-    protected $table;      // db setup of type DBTable, inherit public access
 
 
     /**
@@ -828,37 +847,38 @@ abstract class DBObjectsHandler extends Utils{
             throw new \Exception('Invalid search data.');
         }
 
-        $sql = array();
+        $sql_where = array();
+        $sql_attr = '';
         $values = array();
+        $values_attr = array();
 
         if($where_and){
-            $sql[] = '('.$where_and['sql'].')';
+            $sql_where[] = '('.$where_and['sql'].')';
             $values = array_merge($values, $where_and['values']);
         }
         if($where_or){
-            $sql[] = '('.$where_or['sql'].')';
+            $sql_where[] = '('.$where_or['sql'].')';
             $values = array_merge($values, $where_or['values']);
         }
 
-        $sql = implode(' AND ', $sql);
+        $sql_where = implode(' AND ', $sql_where);
 
         global $wpdb;
 
         // limit number of results
         if(isset($args['limit']) && $args['limit'] !== -1){
-            $sql .= ' LIMIT %d';
-            $values[] = $args['limit'];
-            //$sql = $wpdb->prepare($sql, $args['limit']);
+            $sql_attr .= $wpdb->prepare(' LIMIT %d', $args['limit']);
         }
-        // offet
+        // offset
         if(isset($args['offset']) && $args['offset'] !== 0){
-            $sql .= ' OFFSET %d';
-            $values[] = $args['offset'];
-            //$sql = $wpdb->prepare($sql, $args['offset']);
+            $sql_attr .= $wpdb->prepare(' OFFSET %d', $args['offset']);
         }
 
+        // escape where sql
+        $sql_where = $wpdb->prepare($sql_where, $values);
+
         // perform query
-        $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql, $values);
+        $sql = "SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql_where.$sql_attr;
         $result = $wpdb->get_results($sql);
 
         if($this->debug){
@@ -868,9 +888,9 @@ abstract class DBObjectsHandler extends Utils{
         if($result !== NULL){
 
             // store query parameters
-            $this->sql_where = $sql;
-            $this->where_values = $values;
+            $this->sql_where = $sql_where;
             $this->objects = $result;
+
             // group by column name
             if($args['group_by'] !== null){
                 $this->group_by = $args['group_by'];
@@ -923,7 +943,6 @@ abstract class DBObjectsHandler extends Utils{
 
         if($result !== NULL){
             $this->objects = $result;
-            $this->where_values = array();
             $this->sql_where = '1';
 
             // store pagination values
@@ -961,19 +980,19 @@ abstract class DBObjectsHandler extends Utils{
                 throw new \Exception('Invalid search data.');
             }
 
-            $sql = array();
+            $sql_where = array();
             $values = array();
 
             if($where_and){
-                $sql[] = '('.$where_and['sql'].')';
+                $sql_where[] = '('.$where_and['sql'].')';
                 $values = array_merge($values, $where_and['values']);
             }
             if($where_or){
-                $sql[] = '('.$where_or['sql'].')';
+                $sql_where[] = '('.$where_or['sql'].')';
                 $values = array_merge($values, $where_or['values']);
             }
 
-            $sql = implode(' AND ', $sql);
+            $sql_where = implode(' AND ', $sql_where);
 
         }else{
             if(!$this->is_loaded()){
@@ -986,14 +1005,13 @@ abstract class DBObjectsHandler extends Utils{
             }
 
             // delete currently selected objects
-            $sql = $this->sql_where;
-            $values = $this->where_values;
+            $sql_where = $this->sql_where;
         }
 
         global $wpdb;
 
         // perform query
-        $sql = "DELETE FROM ".$this->table->get_db_table_name()." WHERE ".$sql;
+        $sql = "DELETE FROM ".$this->table->get_db_table_name()." WHERE ".$sql_where;
 
         // escape if values are present
         if($values){
@@ -1008,13 +1026,13 @@ abstract class DBObjectsHandler extends Utils{
 
         if($result !== NULL){
             $this->objects = array();
-            $this->where_values = array();
             $this->sql_where = '';
+            $this->limit = '';
+            $this->offset = 0;
             return $result;
         }
 
         return false;
-
     }
 
     public function count_all(){
@@ -1290,7 +1308,14 @@ abstract class DBObjectsHandler extends Utils{
     }
 
 }
+endif;  // include guard
 
+/**
+ * Class Validator
+ * @package wpdbc
+ * Data validation and sanitation
+ */
+if (!class_exists('\wpdbc\Validator')):
 class Validator{
 
     // todo: move to object instance and build singleton DBTable
@@ -1602,9 +1627,14 @@ class Validator{
         return false;
     }
 }
+endif;  // include guard
 
-
-
+/**
+ * Class DBTableSingleton
+ * @package wpdbc
+ * Singleton skeleton for the database interfaces
+ */
+if (!class_exists('\wpdbc\DBTableSingleton')):
 abstract class DBTableSingleton
 {
 
@@ -1652,15 +1682,14 @@ abstract class DBTableSingleton
     {
     }
 }
-
-
+endif;  // include guard
 
 /**
  * Used to define table properties
- * Todo: realize as singleton
  * Class DBTable
  * @package wpdbc
  */
+if (!class_exists('\wpdbc\DBTable')):
 abstract class DBTable extends DBTableSingleton{
 
     /*
@@ -1772,6 +1801,7 @@ abstract class DBTable extends DBTableSingleton{
         return $this->unique_key_pairs;
     }
 }
-
+endif;  // include guard
 
 ?>
+        

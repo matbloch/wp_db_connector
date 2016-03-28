@@ -149,12 +149,12 @@ class TestItem extends DBObjectInterface{
             $id = $parent->get('id_nummer');
 
         }else{
+
             $id = $where['id_nummer'];
         }
 
         $where_bounded = array('id_nummer'=>$id);
         $bound_item = new BoundTestItem();
-
         $result = $bound_item->exists($where_bounded);
         echo '<strong>Bound item exits:</strong> '.($result?'YES':'NO').'<br>';
         $result = $bound_item->delete($where_bounded);
@@ -317,8 +317,10 @@ class WPDBCTest{
        echo '<strong>New values:</strong> '.print_r($item->get(), true).'<br>';
 
         // delete
+        $item->debugging(true);
 		$result = $item->delete();
         echo '<strong>Deleted item:</strong> '.($result?'YES':'NO').'<br>';
+        $item->debugging(false);
 
 		// check if exists
 		$result = $item->exists(array(
@@ -328,7 +330,7 @@ class WPDBCTest{
         echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 	}
 
-    /* STATUS: PENDING */
+    /* STATUS: TESTED */
 	public function test_coupled_key_item(){
 		
 

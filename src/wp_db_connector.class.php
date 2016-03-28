@@ -504,6 +504,11 @@ abstract class DBObjectInterface extends Utils{
             }
         }
 
+        // direct manipulation: use current representation as search value
+        if($where === null){
+            $where = (array)$this->get();
+        }
+
         // data binding
         $result = $this->execute_bound_actions('update_before', $data, $where);
         if($result === false){
@@ -528,7 +533,7 @@ abstract class DBObjectInterface extends Utils{
             if($obj == false){
                 return false;
             }else{
-                $pk_val = $obj[$pk];
+                $pk_val = $obj->{$pk};
             }
         }else{
             $pk_val = $this->get($pk);
@@ -599,6 +604,11 @@ abstract class DBObjectInterface extends Utils{
                 }
                 return false;
             }
+        }
+
+        // direct manipulation: use current representation as search value
+        if($where === null){
+            $where = (array)$this->get();
         }
 
         // data binding

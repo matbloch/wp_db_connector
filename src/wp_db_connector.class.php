@@ -1408,7 +1408,7 @@ class Validator{
                     }
 
                     // save validation error
-                    if($valid === false){
+                    if(!$valid){
                         $this->errors[] = array(
                             'field' => $field_name,
                             'context' => $context,
@@ -1457,7 +1457,7 @@ class Validator{
     /* validation functions */
     private function validate_ban($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         if($param != null){
             if(in_array($data[$field], explode(';', $param))){
                 return false;
@@ -1470,32 +1470,32 @@ class Validator{
     }
     private function validate_numeric($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return is_numeric($data[$field]);
     }
     private function validate_float($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return filter_var($data[$field], FILTER_VALIDATE_FLOAT);
     }
     private function validate_integer($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return preg_match('/^\d+$/',$data[$field]);
     }
     private function validate_alpha_numeric($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return (preg_match("/^([a-z0-9ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïðòóôõöùúûüýÿ\s])+$/i", $data[$field])?true:false);
     }
     private function validate_alpha_space($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return (preg_match('/^([a-z0-9ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïðòóôõöùúûüýÿ])+$/i', $data[$field])?true:false);
     }
     private function validate_min_len($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         if (function_exists('mb_strlen')) {
             if (mb_strlen($data[$field]) >= (int) $param) {
                 return true;
@@ -1509,7 +1509,7 @@ class Validator{
     }
     private function validate_max_len($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         if (function_exists('mb_strlen')) {
             if (mb_strlen($data[$field]) <= (int) $param) {
                 return true;
@@ -1523,38 +1523,38 @@ class Validator{
     }
     private function validate_boolean($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return (is_bool($data[$field]) || ($data[$field]==1 || $data[$field]==0));
     }
     private function validate_array($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return is_array($data[$field]);
     }
     private function validate_url($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return filter_var($data[$field], FILTER_VALIDATE_URL);
     }
     private function validate_email($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return filter_var($data[$field], FILTER_VALIDATE_EMAIL);
     }
     private function validate_name($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return preg_match("/^([a-zÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñðòóôõöùúûüýÿ '-])+$/i", $data[$field]);
     }
     private function validate_date($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         $timestamp = strtotime($data[$field]);
         return $timestamp ? true : false;
     }
     private function validate_starts($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
 
         foreach(explode(';', $param) as $start){
             if(strpos($data[$field], $start) == 0){
@@ -1565,7 +1565,7 @@ class Validator{
     }
     private function validate_ends($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         foreach(explode(';', $param) as $end){
             if(strlen($data[$field]) - strlen($end) == strrpos($data[$field],$end)){
                 return true;
@@ -1575,12 +1575,12 @@ class Validator{
     }
     private function validate_regex($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         return (preg_match($param, $data[$field])?true:false);
     }
     private function validate_contains($field, $context, $data, $param = null){
         if(!isset($data[$field]))
-            return;
+            return true;
         if(in_array($data[$field], explode(';', $param))){
             return true;
         }

@@ -483,16 +483,15 @@ class WPDBCTest{
         $this->start_msg('test_validation()');
 
         $item = new TestItem();
+        $item ->debugging(true);
 
         // insert new
         $result = $item->insert(array(
             'name'=>'Muster',
             'vorname'=>'         Hans',
             'alter'=> 22,
-            'id_nummer' => 143543
+            'id_nummer' => '45647435345'
         ));
-
-        echo '<strong>Validation errors:</strong> '.print_r($item->table->validator->get_errors(), true);
 		
 	}
 	

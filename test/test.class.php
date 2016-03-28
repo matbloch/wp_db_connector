@@ -54,9 +54,7 @@ class TestTable extends DBTable{
 
 }
 
-
-
-/* define talbe */
+/* define table */
 class BoundTestTable extends DBTable{
 
     /* define required fields */
@@ -86,9 +84,6 @@ class BoundTestTable extends DBTable{
     }
 
 }
-
-
-
 
 class BoundTestItem extends DBObjectInterface{
 
@@ -477,7 +472,8 @@ class WPDBCTest{
         echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 		
 	}
-	
+
+    /* STATUS: TESTED */
 	public function test_validation(){
 
         $this->start_msg('test_validation()');
@@ -498,12 +494,6 @@ class WPDBCTest{
 	public function test_sanitation(){
 		
 	}
-	
-	public function test_function_binding(){
-
-		
-	}
-	
 	
 }
 

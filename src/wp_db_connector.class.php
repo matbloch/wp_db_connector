@@ -28,6 +28,12 @@ abstract class Utils{
      */
 
     /**
+     * placeholder: implemented in object handlers
+     */
+    protected $table;
+    protected $debug;
+
+    /**
      * data binding and action queuing
      * @var array({order}=>array($callback, $eval_return))
      */
@@ -132,6 +138,85 @@ abstract class Utils{
         return $e;
     }
 
+    /**
+     * @param bool $active activate/deactivate debugging for object instance
+     */
+    public function debugging($active){
+        $this->debug = ($active?true:false);
+    }
+    protected function debug($type, $data = array()){
+
+        $debug = debug_backtrace();
+
+        echo '<div style="opacity:0.3; margin: 10px 0;">';
+        ?>
+
+        <table cellpadding="4" border="1" style="border-spacing: 1px; border-collapse: separate;">
+            <tr>
+                <td>
+                    Context: <strong style="color: red"><?php echo $debug[1]['function']; ?></strong>
+                </td>
+                <td>
+                    Class: <strong><?php echo get_class($this); ?></strong>
+                </td>
+            </tr>
+
+        <?php
+        if($type == 'query'){
+            global $wpdb;
+            ?>
+            <tr>
+                <td>
+                    Query
+                </td>
+                <td>
+                    <?php print_r($wpdb->last_query); ?>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    Result
+                </td>
+                <td>
+                    <?php
+                    if($data['result']){
+                        print_r($data['result']);
+                    }else{
+                        print_r($wpdb->last_result);
+                    }
+                    ?>
+                </td>
+            </tr>
+            <?php if($wpdb->last_error){ ?>
+                <tr>
+                    <td>
+                        Errors
+                    </td>
+                    <td>
+                        <?php print_r($wpdb->last_error); ?>
+                    </td>
+                </tr>
+            <?php }
+
+        }elseif($type == 'validation'){
+            ?>
+            <tr>
+                <td>
+                    Validation Error
+                </td>
+                <td>
+                    <?php
+                        print_r($this->table->validator->get_errors());
+                    ?>
+                </td>
+            </tr>
+            <?php
+        }
+        echo '</table>';
+        echo '</div>';
+
+    }
+
 }
 
 abstract class DBObjectInterface extends Utils{
@@ -141,6 +226,11 @@ abstract class DBObjectInterface extends Utils{
      * @var DBTable Singleton
      */
     protected $table;
+
+    /**
+     * @var bool display the performed sql queries and errors
+     */
+    protected $debug;
 
     /**
      * @return string Name of extended Database Table object instance
@@ -159,7 +249,7 @@ abstract class DBObjectInterface extends Utils{
     public function __construct()
     {
 
-        // get table (singleton) instance
+        // get table (extended singleton) instance
         $this->table = call_user_func(array('wpdbc\\'.$this->define_db_table(), 'getInstance'));
 
         if(!is_subclass_of($this->table, 'wpdbc\DBTable')){
@@ -274,6 +364,9 @@ abstract class DBObjectInterface extends Utils{
         // validation
         $result = $this->table->validator->validate('get', $data);
         if($result === false){
+            if($this->debug){
+                $this->debug('validation');
+            }
             return false;
         }
 
@@ -287,6 +380,10 @@ abstract class DBObjectInterface extends Utils{
         global $wpdb;
         $sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$where[0], $where[1]);
         $results = $wpdb->get_results( $sql );
+
+        if($this->debug){
+            $this->debug('query');
+        }
 
         if(empty($results)){
             return false;
@@ -383,6 +480,9 @@ abstract class DBObjectInterface extends Utils{
         // validation
         $result = $this->table->validator->validate('update_data', $data);
         if($result === false){
+            if($this->debug){
+                $this->debug('validation');
+            }
             return false;
         }
 
@@ -397,6 +497,9 @@ abstract class DBObjectInterface extends Utils{
         if($where !== null){
             $result = $this->table->validator->validate('update_where', $where);
             if($result === false){
+                if($this->debug){
+                    $this->debug('validation');
+                }
                 return false;
             }
         }
@@ -444,6 +547,10 @@ abstract class DBObjectInterface extends Utils{
             $where_format   // where format
         );
 
+        if($this->debug){
+            $this->debug('query', array('result'=>$success));
+        }
+
         if($success === false){
             throw new \Exception("An error occurred during the update.");
         }
@@ -487,6 +594,9 @@ abstract class DBObjectInterface extends Utils{
         if($where !== null){
             $result = $this->table->validator->validate('delete', $where);
             if($result === false){
+                if($this->debug){
+                    $this->debug('validation');
+                }
                 return false;
             }
         }
@@ -522,6 +632,10 @@ abstract class DBObjectInterface extends Utils{
         $sql = $wpdb->prepare('DELETE FROM '.$this->table->get_db_table_name().' WHERE '.$where_sql, $where_values);
         $success = $wpdb->query($sql);
 
+        if($this->debug){
+            $this->debug('query', array('result'=>$success));
+        }
+
         // unset properties to ensure no further manipulations
         if($success === 1){
             $this->properties = array();
@@ -551,6 +665,9 @@ abstract class DBObjectInterface extends Utils{
         // validation
         $result = $this->table->validator->validate('insert', $data);
         if($result === false){
+            if($this->debug){
+                $this->debug('validation');
+            }
             return false;
         }
 
@@ -582,12 +699,15 @@ abstract class DBObjectInterface extends Utils{
         $value_format = array_values($value_format);
 
         global $wpdb;
-
         $success = $wpdb->insert(
             $this->table->get_db_table_name(),
             $data,
             $value_format
         );
+
+        if($this->debug){
+            $this->debug('query', array('result'=>$success));
+        }
 
         // === data binding
         $result = $this->execute_bound_actions('insert_after', $data, $success);
@@ -1346,12 +1466,12 @@ class Validator{
     private function validate_float($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return;
-        return is_float($data[$field]);
+        return filter_var($data[$field], FILTER_VALIDATE_FLOAT);
     }
     private function validate_integer($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return;
-        return is_int($data[$field]);
+        return preg_match('/^\d+$/',$data[$field]);
     }
     private function validate_alpha_numeric($field, $context, $data, $param = null){
         if(!isset($data[$field]))
@@ -1401,6 +1521,27 @@ class Validator{
             return;
         return is_array($data[$field]);
     }
+    private function validate_url($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return filter_var($data[$field], FILTER_VALIDATE_URL);
+    }
+    private function validate_email($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return filter_var($data[$field], FILTER_VALIDATE_EMAIL);
+    }
+    private function validate_name($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        return preg_match("/^([a-zÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñðòóôõöùúûüýÿ '-])+$/i", $data[$field]);
+    }
+    private function validate_date($field, $context, $data, $param = null){
+        if(!isset($data[$field]))
+            return;
+        $timestamp = strtotime($data[$field]);
+        return $timestamp ? true : false;
+    }
     private function validate_starts($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return;
@@ -1438,13 +1579,64 @@ class Validator{
 }
 
 
+
+abstract class DBTableSingleton
+{
+
+
+    /**
+     * @var DBTable The reference to *Singleton* instance of this class
+     */
+    protected static $instances = array();
+
+    protected function __construct()
+    {
+    }
+
+    final public static function getInstance()
+    {
+
+        $calledClass = get_called_class();
+
+        if (!isset(self::$instances[$calledClass]))
+        {
+            self::$instances[$calledClass] = new $calledClass();
+        }
+
+        return self::$instances[$calledClass];
+    }
+
+
+    /**
+     * Private clone method to prevent cloning of the instance of the
+     * *Singleton* instance.
+     *
+     * @return void
+     */
+    final private function __clone()
+    {
+    }
+
+    /**
+     * Private unserialize method to prevent unserializing of the *Singleton*
+     * instance.
+     *
+     * @return void
+     */
+    final private function __wakeup()
+    {
+    }
+}
+
+
+
 /**
  * Used to define table properties
  * Todo: realize as singleton
  * Class DBTable
  * @package wpdbc
  */
-abstract class DBTable{
+abstract class DBTable extends DBTableSingleton{
 
     /*
         Usage of extended Class:
@@ -1452,24 +1644,6 @@ abstract class DBTable{
         $db_table->get_db_table_name();
      */
 
-    /**
-     * @var DBTable The reference to *Singleton* instance of this class
-     */
-    protected static $instance;
-
-    /**
-     * Returns the *Singleton* instance of this class.
-     *
-     * @return DBTable The *Singleton* instance.
-     */
-    public static function getInstance()
-    {
-        if (null === static::$instance) {
-            static::$instance = new static();
-        }
-
-        return static::$instance;
-    }
 
     /**
      * Protected constructor to prevent creating a new instance of the
@@ -1490,25 +1664,6 @@ abstract class DBTable{
         $this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
     }
 
-    /**
-     * Private clone method to prevent cloning of the instance of the
-     * *Singleton* instance.
-     *
-     * @return void
-     */
-    private function __clone()
-    {
-    }
-
-    /**
-     * Private unserialize method to prevent unserializing of the *Singleton*
-     * instance.
-     *
-     * @return void
-     */
-    private function __wakeup()
-    {
-    }
 
     protected $db_table_name;   // holds the db values of the object
     protected $db_primary_key;

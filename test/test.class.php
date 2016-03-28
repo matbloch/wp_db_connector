@@ -54,58 +54,9 @@ class TestTable extends DBTable{
 
 }
 
-/* define test item handler */
-class TestItem extends DBObjectInterface{
-	
-	protected function define_db_table(){
-        return 'TestTable';
-    }
 
-    protected function define_data_binding(){
-        // placeholder function
-        // use bind_action here to define the data binding
-        $this->bind_action('insert_before', array($this,'bound_insert'));
-        $this->bind_action('delete_before', array($this,'bound_delete'));
-    }
 
-    protected function bound_insert($data, $where){
-
-        echo '<br><br>bound action: create bounded item<br>';
-        if(isset($data['id_nummer'])){
-            $bound_item = new BoundTestItem();
-
-            $result = $bound_item->exists($data);
-            echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-
-            $result = $bound_item->insert(array('id_nummer'=>$data['id_nummer']));
-            echo '<strong>Item inserted:</strong> '.($result === false?'NO': 'YES').'<br>';
-
-            $result = $bound_item->exists($data);
-            echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-
-        }
-        echo '<br><br>';
-    }
-    protected function bound_delete($where){
-
-        echo '<br><br>bound action: delete bounded item<br>';
-        if($where && isset($where['id_nummer'])){
-
-            $bound_item = new BoundTestItem();
-
-            $result = $bound_item->exists($where);
-            echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-            $result = $bound_item->delete($where);
-            echo '<strong>Item deleted:</strong> '.($result === false?'NO': 'YES').'<br>';
-            $result = $bound_item->exists($where);
-            echo '<strong>Bound testitem exits:</strong> '.($result?'YES':'NO').'<br>';
-        }
-        echo '<br><br>';
-
-    }
-
-}
-
+/* define talbe */
 class BoundTestTable extends DBTable{
 
     /* define required fields */
@@ -147,6 +98,75 @@ class BoundTestItem extends DBObjectInterface{
 
 }
 
+/* define test item handler */
+class TestItem extends DBObjectInterface{
+	
+	protected function define_db_table(){
+        return 'TestTable';
+    }
+
+    protected function define_data_binding(){
+        // placeholder function
+        // use bind_action here to define the data binding
+        $this->bind_action('insert_before', array($this,'bound_insert'));
+        $this->bind_action('delete_before', array($this,'bound_delete'));
+    }
+
+    protected function bound_insert($data, $where){
+
+        echo '<br><br>bound action: create bounded item<br>';
+
+        if(isset($data['id_nummer'])){
+
+            $i = new BoundTestItem();
+
+            $a = $i->exists($data);
+            echo '<strong>Bound item exits:</strong> '.($a?'YES':'NO').'<br>';
+            $a = $i->insert(array('id_nummer'=>$data['id_nummer']));
+            echo '<strong>Bound item inserted:</strong> '.($a === false?'NO': 'YES').'<br>';
+            $a = $i->exists($data);
+            echo '<strong>Bound item exits:</strong> '.($a?'YES':'NO').'<br>';
+        }
+
+        echo '<br><br>';
+    }
+    protected function bound_delete($where){
+
+        echo '<br><br>bound action: delete bounded item<br>';
+
+        $id = 0;
+
+        // if the primary key is not provided: get it from parent
+        if($where && !isset($where['id_nummer'])){
+
+            $parent = new TestItem();
+            $succ = $parent->load($where);
+
+            if(!$succ){
+                echo '<br>Failed to load parent!<br>';
+                return;
+            }
+            $id = $parent->get('id_nummer');
+
+        }else{
+            $id = $where['id_nummer'];
+        }
+
+        $where_bounded = array('id_nummer'=>$id);
+        $bound_item = new BoundTestItem();
+
+        $result = $bound_item->exists($where_bounded);
+        echo '<strong>Bound item exits:</strong> '.($result?'YES':'NO').'<br>';
+        $result = $bound_item->delete($where_bounded);
+        echo '<strong>Bound Item deleted:</strong> '.($result === false?'NO': 'YES').'<br>';
+        $result = $bound_item->exists($where_bounded);
+        echo '<strong>Bound item exits:</strong> '.($result?'YES':'NO').'<br>';
+
+        echo '<br><br>';
+
+    }
+
+}
 
 class TableInstaller{
 
@@ -206,7 +226,19 @@ class WPDBCTest{
 	
 	public function __construct(){
         $table = new TableInstaller();
-		$this->add_dummy_data();
+		//$this->add_dummy_data();
+
+/*
+        $data = array('id_nummer'=>15342543);
+        $bound_item = new BoundTestItem();
+        $a = $bound_item->exists($data);
+
+        echo '<strong>Bound item exits:</strong> '.($a?'YES':'NO').'<br>';
+        $a = $bound_item->insert(array('id_nummer'=>$data['id_nummer']));
+        $a = $bound_item->exists($data);
+        echo '<strong>Bound item exits:</strong> '.($a?'YES':'NO').'<br>';
+
+*/
 	}
 
     public function object_memory_usage(){
@@ -226,8 +258,10 @@ class WPDBCTest{
     }
 
 	public function add_dummy_data(){
-		
+
+        // item handler
 		$item = new TestItem();
+
 		// insert item
 		$result = $item->insert(array(
 			'name'=>'Freddy',
@@ -237,6 +271,7 @@ class WPDBCTest{
 			'id_nummer' => 2543524
 		));
 		// insert item
+
 		$result = $item->insert(array(
 			'name'=>'Martin',
 			'vorname'=>'Solveign',
@@ -244,6 +279,7 @@ class WPDBCTest{
             'code'=>'#000382',
 			'id_nummer' => 134523
 		));
+
 		
 	}
 	
@@ -291,7 +327,8 @@ class WPDBCTest{
 		));
         echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 	}
-	
+
+    /* STATUS: PENDING */
 	public function test_coupled_key_item(){
 		
 
@@ -369,8 +406,8 @@ class WPDBCTest{
 
 		
 	}
-	
-	/* test regular routines - unique key */
+
+    /* STATUS: TESTED */
 	public function test_unique_key_item(){
 		
 		$this->start_msg('test_unique_key_item()');

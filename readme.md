@@ -1,10 +1,13 @@
 # Wordpress Database Connector
 
+# Requirements
+- PHP 5.3
+
 # Quickstart
 - define table objects
 - hook table installer
-- definie table abstraction classes
-- have fun
+- define table abstraction classes
+- ...profit
 
 # Upcomming Features
 - Generate static DBTable class from constructor
@@ -115,6 +118,10 @@ class TestTable extends DBTable{
 - `max_len,100`
 - `boolean` true, false, 0, 1
 - `array`
+- `url`
+- `email`
+- `name`
+- `date`
 - `starts,a;b;c`
 - `ends,a;b;c`
 - `contains,m;f` must contain one of the values
@@ -243,6 +250,8 @@ The arguments passed to the bounded functions **are always sanitized and validat
 ### 2.3 Interface Methods
 
 **Available methods**
+- `debugging`(**$active**)
+	> **@param** bool $active activate/deactivate debugging for object instance
 - `loaded()`
 	> **@throws** \Exception if the current object is not loaded
 - `is_loaded()`

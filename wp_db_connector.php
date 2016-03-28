@@ -3,7 +3,7 @@
  * Plugin Name: Wordpress Table Connector
  * Version: 1.0
  * Plugin URI: https://github.com/matbloch
- * Description: This is a plugin to test the wordpress table connector class
+ * Description: This is a plugin to test the Wordpress table connector class
  * Author: Matthias Bloch
  * Author URI: https://github.com/matbloch
  * Requires at least: 4.0
@@ -17,13 +17,6 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 // Load plugin class files
 require_once( 'src/wp_db_connector.class.php' );
 require_once( 'test/test.class.php' );
-
-/**
- * Returns the main instance of WordPress_Plugin_Template to prevent the need to use globals.
- *
- * @since  1.0.0
- * @return object WordPress_Plugin_Template
- */
 
 $test = new \wpdbc\WPDBCTest();
 
@@ -54,14 +47,17 @@ $result = $item->insert(array(
     'code'=>'#000382',
     'id_nummer' => 134523
 ));
-
 */
 
 
+//$test->add_dummy_data();
+
 //$test->test_unique_key_item();
-//$test->test_coupled_key_item();
+$test->test_coupled_key_item();
 //$test->test_direct_manipulation();
 //$test->test_validation();
 // $test->test_sanitation();
 
-//die();
+
+
+die();

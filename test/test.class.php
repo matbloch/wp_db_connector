@@ -16,7 +16,7 @@ class TestTable extends DBTable{
             'code' => '%s',
             'name' => '%s',
             'vorname' => '%s',
-            'alter' => '%d'
+            'age' => '%d'
         );
     }
     protected function define_db_primary_key(){
@@ -41,7 +41,7 @@ class TestTable extends DBTable{
             'code' => 'starts,#',
             'name' => 'required:insert',
             'vorname' => 'required:insert',
-            'alter' => 'integer'
+            'age' => 'integer'
         );
     }
     protected function define_sanitation_rules(){
@@ -103,8 +103,8 @@ class TestItem extends DBObjectInterface{
     protected function define_data_binding(){
         // placeholder function
         // use bind_action here to define the data binding
-        $this->bind_action('insert_before', array($this,'bound_insert'));
-        $this->bind_action('delete_before', array($this,'bound_delete'));
+        //$this->bind_action('insert_before', array($this,'bound_insert'));
+        //$this->bind_action('delete_before', array($this,'bound_delete'));
     }
 
     protected function bound_insert($data, $where){
@@ -160,6 +160,13 @@ class TestItem extends DBObjectInterface{
         echo '<br><br>';
 
     }
+}
+
+class MultiObjectHandler extends DBObjectsHandler{
+
+    protected function define_db_table(){
+        return 'TestTable';
+    }
 
 }
 
@@ -183,7 +190,7 @@ class TableInstaller{
             $sql =  "CREATE TABLE ". $search_table . " (
 					 `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 					 `id_nummer` int(11) UNSIGNED COMMENT 'unique key',
-					 `alter` int(11) UNSIGNED COMMENT '',
+					 `age` int(11) UNSIGNED COMMENT '',
 					 `code` varchar(255) COLLATE utf8mb4_unicode_ci COMMENT '',
 					 `name` varchar(255) COLLATE utf8mb4_unicode_ci COMMENT '',
 					 `vorname` varchar(255) COLLATE utf8mb4_unicode_ci COMMENT '',
@@ -221,19 +228,6 @@ class WPDBCTest{
 	
 	public function __construct(){
         $table = new TableInstaller();
-		//$this->add_dummy_data();
-
-/*
-        $data = array('id_nummer'=>15342543);
-        $bound_item = new BoundTestItem();
-        $a = $bound_item->exists($data);
-
-        echo '<strong>Bound item exits:</strong> '.($a?'YES':'NO').'<br>';
-        $a = $bound_item->insert(array('id_nummer'=>$data['id_nummer']));
-        $a = $bound_item->exists($data);
-        echo '<strong>Bound item exits:</strong> '.($a?'YES':'NO').'<br>';
-
-*/
 	}
 
     public function object_memory_usage(){
@@ -262,15 +256,14 @@ class WPDBCTest{
 			'name'=>'Freddy',
 			'vorname'=>'Krueger',
 			'code'=>'#8239709',
-			'alter'=> 22,
+			'age'=> 22,
 			'id_nummer' => 2543524
 		));
 		// insert item
-
 		$result = $item->insert(array(
 			'name'=>'Martin',
 			'vorname'=>'Solveign',
-			'alter'=> 54,
+			'age'=> 54,
             'code'=>'#000382',
 			'id_nummer' => 134523
 		));
@@ -287,7 +280,8 @@ class WPDBCTest{
         $item = new TestItem();
         var_dump($item->extract_unique_identifier_values($data, $pairs));
     }
-	
+
+    /* STATUS: TESTED */
 	public function test_direct_manipulation(){
 		
 		$this->start_msg('test_direct_manipulation()');
@@ -297,7 +291,7 @@ class WPDBCTest{
 		$result = $item->insert(array(
 			'name'=>'Mustermann',
 			'vorname'=>'Max',
-			'alter'=> 35,
+			'age'=> 35,
 			'id_nummer' => 2464323
 		), true);
 
@@ -306,7 +300,7 @@ class WPDBCTest{
 
         // update
         $result = $item->update(array(
-			'alter' => 55
+			'age' => 55
 		));
 
        echo '<strong>New values:</strong> '.print_r($item->get(), true).'<br>';
@@ -345,7 +339,7 @@ class WPDBCTest{
         $test_data = array(
             'name'=>'Muster',
             'vorname'=>'Freddi',
-            'alter'=> 22,
+            'age'=> 22,
             'id_nummer' => 3451274
         );
 
@@ -372,7 +366,7 @@ class WPDBCTest{
 		
 		// update
 		$result = $item->update(array(
-			'alter' => 50
+			'age' => 50
 		));
 
 		// load
@@ -422,7 +416,7 @@ class WPDBCTest{
 		$result = $item->insert(array(
 			'name'=>'Muster',
 			'vorname'=>'Hans',
-			'alter'=> 22,
+			'age'=> 22,
 			'id_nummer' => 4444
 		));
 
@@ -445,7 +439,7 @@ class WPDBCTest{
 
 		// update
 		$result = $item->update(array(
-			'alter'=>66
+			'age'=>66
 		));
 		
 		// load from coupled key
@@ -485,7 +479,7 @@ class WPDBCTest{
         $result = $item->insert(array(
             'name'=>'Muster',
             'vorname'=>'         Hans',
-            'alter'=> 22,
+            'age'=> 22,
             'id_nummer' => '45647435345'
         ));
 		
@@ -494,7 +488,70 @@ class WPDBCTest{
 	public function test_sanitation(){
 		
 	}
-	
+
+    /* multi-object handler */
+    public function test_multi_obj_handler(){
+
+        $this->add_dummy_data();
+
+        // item handler
+        $item = new TestItem();
+
+        // insert item
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Martin',
+            'age'=> 15,
+        ));
+        // insert item
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Andy',
+            'age'=> 45,
+        ));
+        // insert item
+        $result = $item->insert(array(
+            'name'=>'Bowie',
+            'vorname'=>'David',
+            'age'=> 45,
+        ));
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Alex',
+            'age'=> 11,
+        ));
+        $result = $item->insert(array(
+            'name'=>'Warhole',
+            'vorname'=>'Jason',
+            'age'=> 87,
+        ));
+
+        $m = new MultiObjectHandler();
+        $m->debugging(true);
+
+        // load multiple objects
+        $m->load(
+            array(
+                'name'=>array('Warhole', 'bla'),
+            ),
+           array(
+               //'name'=>array('Warhole', 'Bowie', 'Muster'),
+               //'vorname'=> 'Martin'
+           ),
+           array(
+               //'limit' => 5,
+               //'offset' => 0,
+               'group_by' => 'name'
+           )
+
+        );
+        $objs = $m->get_objects();
+
+        $m->delete();
+
+
+
+    }
 }
 
 

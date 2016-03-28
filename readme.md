@@ -290,6 +290,50 @@ The arguments passed to the bounded functions **are always sanitized and validat
 	> **@return** bool 1 on success, false if entry could not be inserted
 	> **@throws** \Exception if invalid input values are given
 
+## Multi-Object Handler
+
+
+### 2.1 Interface Definition
+
+**Required Methods**
+- `protected function define_db_table()`
+> @return string Class name of extended DBTable Database Table class
+
+**Optional Methods**
+- `protected function define_data_binding()`: See Section **2.2
+
+
+```php
+
+```
+
+### Interface Methods
+
+**Available methods**
+
+- `debugging`(**$active**)
+	> **@param** bool $active activate/deactivate debugging for object instance
+- `loaded()`
+	> **@throws** \Exception no objects have been loaded
+- `is_loaded()`
+	> **@return** bool whether some objects have been loaded (e.g. in case no object been found)
+- `is_queried()`
+	> **@return**  bool whether a search query has been performed or not (objects might be empty)
+- `load`(array **$fields_and**, array **$fields_or**, array **$args**)
+
+	> Load objects specified by search data
+	> **@param** array $fields_and column values with 'AND' relation.
+	> Format: array('col1'=>'searchval1', 'col2'=>array('col2_val1', 'col2_val1'))
+	> **@param** array $fields_or column values with 'OR' relation.
+	> Format: array('col1'=>'searchval1', 'col2'=>array('col2_val1', 'col2_val1'))
+	> **@param** array $args (optional) additional query pagination parameters: limit, offset, group_by (column namae)
+	> **@return** bool|int false if query failed or number of search results (including 0)
+	> **@throws** \Exception if invalid search data supplied
+- `load_all`(array **$args**)
+	> Loads all table entries into the object
+	> **@param** array $args (optional) additional query pagination parameters: limit, offset, group_by (column name)
+	> **@return** bool|int false if query failed or number of search results (including 0)
+
 # Usage
 
 ## General Method Return Behavior

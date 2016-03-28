@@ -748,14 +748,13 @@ abstract class DBObjectsHandler extends Utils{
     private $limit;
     private $offset;
 
-    public $table;      // db setup of type DBTable, inherit public access
+    protected $table;      // db setup of type DBTable, inherit public access
 
 
     /**
      * @return string Class name of extended DBTable Database Table class
      */
     abstract protected function define_db_table();
-    abstract protected function define_order();
 
     /**
      * Defines data binding by making calls to the bind_cation method
@@ -780,9 +779,9 @@ abstract class DBObjectsHandler extends Utils{
 
     }
 
-    protected function __destruct()
+    public function __destruct()
     {
-        $this->$table = null;
+        $this->table = null;
     }
 
     /**
@@ -800,107 +799,19 @@ abstract class DBObjectsHandler extends Utils{
     }
 
     /**
-     * whether a search query has been performed or not (objects might be empty)
+     * @return bool whether a search query has been performed or not (objects might be empty)
      */
     public function is_queried(){
         return !empty($this->sql_where);
     }
 
     /**
-     * removes sub-arrays from input data and returns them
-     * @param $data array input data
-     * @return array sub-arrays in input data
-     */
-    public function extract_or_fields(&$data){
-
-        $or = array();
-        foreach($data as $i=>&$field){
-            if(is_array($field)) {
-                $or[$i] = $field;
-                unset($data[$i]);
-            }
-        }
-        return $or;
-    }
-
-
-    /**
-     * Generates a valid (no validation/sanitation, available columns) WHERE query for the input data
-     * @param $data array format: array('col1'=>'val1', 'col2'=>array('or_val1', 'or_val2'))
-     * @param string $relation relation between the data (AND/OR)
-     * @return array|bool false if no valid columns. array('sql'=>string $where_sql, 'values'=>array $data)
-     * @throws \Exception if invalid relation specified
-     */
-    private function prepare_sql_where($data, $relation = 'AND'){
-
-        $relation = strtolower($relation);
-        if($relation != 'and' || $relation != 'or'){
-            throw new \Exception('Invalid relation specified: '.$relation);
-        }
-
-        $keys_and = array();
-        $keys_or = array();
-
-        // extract OR conditions
-        $or_data = $this->extract_or_fields($data);
-
-        // extract valid fields
-        $format_and = array_intersect_key($this->table->get_db_format(), $data);
-        $format_or = array_intersect_key($this->table->get_db_format(), $or_data);
-
-        // do not execute query if no arguments given
-        if(empty($format_and) && empty($format_or)){
-            return false;
-        }
-
-        // sort by keys
-        ksort($format_and);
-        ksort($format_or);
-
-        // extract corresponding values
-        $and_values = array_intersect_key($data, $this->table->get_db_format());
-        $or_values = array_intersect_key($or_data, $this->table->get_db_format());
-
-        ksort($and_values);
-        ksort($or_values);
-
-        // build sql string
-        $sql_where = '';
-        $sql_array = array();
-
-        if($format_and){
-            // form sql by merging key and formats
-            $sql_array[] = urldecode(http_build_query($format_and,'',' AND '));
-        }
-
-        // $or data always contains array of more than one value
-        foreach($or_data as $col_name=>$values){
-
-            $format = $format_or[$col_name];
-            $or = $col_name.' = '.$format;
-            // repeat OR condition for same key = format
-            $sql_array[] = '('.$or.str_repeat(' OR '.$or, count($values)-1).')';
-        }
-
-        // form string
-        $sql_where = implode(' '.$relation.' ', $sql_array);
-
-        // merge values
-        $and_values = array_values($and_values);
-        if(!empty($or_values)){
-            // collapse array or values
-            $or_values = call_user_func_array('array_merge', $or_values);
-        }
-
-        return array('sql' =>$sql_where, 'values'=>array_merge($and_values, $or_values));
-
-    }
-
-    /**
      * Load objects specified by search data
-     * @param array $fields_and search data with 'AND' relation
-     * @param array $fields_or search data with 'OR' relation
-     * @param array $args (optional) additional query pagination parameters
+     * @param array $fields_and column values with 'AND' relation.
+     *              Format: array('col1'=>'searchval1', 'col2'=>array('col2_val1', 'col2_val1'))
+     * @param array $fields_or column values with 'OR' relation.
+     *              Format: array('col1'=>'searchval1', 'col2'=>array('col2_val1', 'col2_val1'))
+     * @param array $args (optional) additional query pagination parameters: limit, offset, group_by
      * @return bool|int false if query failed or number of search results (including 0)
      * @throws \Exception if invalid search data supplied
      */
@@ -913,7 +824,7 @@ abstract class DBObjectsHandler extends Utils{
         $where_and = $this->prepare_sql_where($fields_and, 'AND');
         $where_or = $this->prepare_sql_where($fields_or, 'OR');
 
-        if(!$where_and && $where_or){
+        if(!$where_and && !$where_or){
             throw new \Exception('Invalid search data.');
         }
 
@@ -933,29 +844,26 @@ abstract class DBObjectsHandler extends Utils{
 
         global $wpdb;
 
-        // group by
-        if(isset($args['group_by']) && $args['group_by'] !== null){
-            if($this->table->get_db_format($args['group_by'])){
-                $sql .= ' GROUP BY %s';
-            }
-            $sql = $wpdb->prepare($sql, $args['group_by']);
-        }
-
         // limit number of results
         if(isset($args['limit']) && $args['limit'] !== -1){
             $sql .= ' LIMIT %d';
-            $sql = $wpdb->prepare($sql, $args['limit']);
+            $values[] = $args['limit'];
+            //$sql = $wpdb->prepare($sql, $args['limit']);
         }
-
         // offet
         if(isset($args['offset']) && $args['offset'] !== 0){
             $sql .= ' OFFSET %d';
-            $sql = $wpdb->prepare($sql, $args['offset']);
+            $values[] = $args['offset'];
+            //$sql = $wpdb->prepare($sql, $args['offset']);
         }
 
         // perform query
         $sql = $wpdb->prepare("SELECT * FROM ".$this->table->get_db_table_name()." WHERE ".$sql, $values);
         $result = $wpdb->get_results($sql);
+
+        if($this->debug){
+            $this->debug('query', array('result'=>$result));
+        }
 
         if($result !== NULL){
 
@@ -963,9 +871,10 @@ abstract class DBObjectsHandler extends Utils{
             $this->sql_where = $sql;
             $this->where_values = $values;
             $this->objects = $result;
-
+            // group by column name
             if($args['group_by'] !== null){
                 $this->group_by = $args['group_by'];
+                $this->objects = $this->group($args['group_by'], $result);
             }
             if(isset($args['limit']) && $args['limit'] !== -1){
                 $this->limit = $args['limit'];
@@ -983,7 +892,7 @@ abstract class DBObjectsHandler extends Utils{
 
     /**
      * Loads all table entries into the object
-     * @param array $args (optional) additional query pagination parameters
+     * @param array $args (optional) additional query pagination parameters: limit, offset, group_by
      * @return bool|int false if query failed or number of search results (including 0)
      */
     public function load_all(
@@ -995,25 +904,22 @@ abstract class DBObjectsHandler extends Utils{
 
         $sql = "SELECT * FROM ".$this->table->get_db_table_name();
 
-        // group by
-        if(isset($args['group_by']) && $args['group_by'] !== null){
-            if($this->table->get_db_format($args['group_by'])){
-                $sql .= ' GROUP BY %s';
-            }
-            $sql = $wpdb->prepare($sql, $args['group_by']);
-        }
         // limit number of results
         if(isset($args['limit']) && $args['limit'] !== -1){
             $sql .= ' LIMIT %d';
             $sql = $wpdb->prepare($sql, $args['limit']);
         }
-        // offet
+        // offset
         if(isset($args['offset']) && $args['offset'] !== 0){
             $sql .= ' OFFSET %d';
             $sql = $wpdb->prepare($sql, $args['offset']);
         }
 
         $result = $wpdb->get_results($sql);
+
+        if($this->debug){
+            $this->debug('query', array('result'=>$result));
+        }
 
         if($result !== NULL){
             $this->objects = $result;
@@ -1023,6 +929,8 @@ abstract class DBObjectsHandler extends Utils{
             // store pagination values
             if(isset($args['group_by']) && $args['group_by'] !== null){
                 $this->grouped_by = $args['group_by'];
+                // group objects by column value
+                $this->objects = $this->group($args['group_by'], $result);
             }
             if(isset($args['limit']) && $args['limit'] !== -1){
                 $this->limit = $args['limit'];
@@ -1094,6 +1002,10 @@ abstract class DBObjectsHandler extends Utils{
 
         $result = $wpdb->get_results($sql);
 
+        if($this->debug){
+            $this->debug('query', array('result'=>$result));
+        }
+
         if($result !== NULL){
             $this->objects = array();
             $this->where_values = array();
@@ -1118,33 +1030,6 @@ abstract class DBObjectsHandler extends Utils{
           category
 
         */
-
-    }
-
-    protected function sql_and_or(array $fields_and, $fields_or = array()){
-
-        $where_and = $this->prepare_sql_where($fields_and, 'AND');
-        $where_or = $this->prepare_sql_where($fields_or, 'OR');
-
-        if(!$where_and && !$where_or){
-            throw new \Exception('Invalid search data.');
-        }
-
-        $sql = array();
-        $values = array();
-
-        if($where_and){
-            $sql[] = '('.$where_and['sql'].')';
-            $values = array_merge($values, $where_and['values']);
-        }
-        if($where_or){
-            $sql[] = '('.$where_or['sql'].')';
-            $values = array_merge($values, $where_or['values']);
-        }
-
-        $sql = implode(' AND ', $sql);
-
-        return array('sql'=>$sql, 'values', $values);
 
     }
 
@@ -1250,18 +1135,10 @@ abstract class DBObjectsHandler extends Utils{
         }, $this->objects);
     }
 
-    public function get_objects($group_by = ''){
+    public function get_objects($key = null){
 
-        if($group_by != ''){
-
-            $col = array();
-            // group by parent id
-
-            foreach($this->objects as $obj){
-                $col[$obj->{$group_by}][] = $obj;
-            }
-            return $col;
-
+        if($key != null){
+            return $this->group($key, $this->objects);
         }else{
             return $this->objects;
         }
@@ -1271,6 +1148,144 @@ abstract class DBObjectsHandler extends Utils{
     public function edit($data){
         // todo: include additional where condition
 
+
+    }
+
+    protected function group($key, array $data){
+        $d = array();
+
+        if(!preg_match('^[a-zA-Z_][a-zA-Z0-9_]*^', $key)){
+            throw new \Exception('Invalid grouping column name "'.$key.'".');
+        }
+
+        foreach($data as $entry){
+            if(isset($entry->{$key})){
+                $d[$entry->{$key}][] = $entry;
+            }
+
+        }
+
+        return $d;
+    }
+
+    /**
+     * removes sub-arrays from input data and returns them
+     * @param $data array input data
+     * @return array sub-arrays in input data
+     */
+    public function extract_or_fields(&$data){
+
+        $or = array();
+        foreach($data as $i=>&$field){
+            if(is_array($field)) {
+                $or[$i] = $field;
+                unset($data[$i]);
+            }
+        }
+        return $or;
+    }
+
+    /**
+     * Generates a valid (no validation/sanitation, available columns) WHERE query for the input data
+     * @param $data array format: array('col1'=>'val1', 'col2'=>array('or_val1', 'or_val2'))
+     * @param string $relation relation between the data (AND/OR)
+     * @return array|bool false if no valid columns. array('sql'=>string $where_sql, 'values'=>array $data)
+     * @throws \Exception if invalid relation specified
+     */
+    private function prepare_sql_where($data, $relation = 'AND'){
+
+        $relation = strtolower($relation);
+
+        if($relation != 'and' && $relation != 'or'){
+            throw new \Exception('Invalid relation specified: '.$relation);
+        }
+
+        $keys_and = array();
+        $keys_or = array();
+
+        // extract OR conditions
+        $or_data = $this->extract_or_fields($data);
+
+        // extract valid fields
+        $format_and = array_intersect_key($this->table->get_db_format(), $data);
+        $format_or = array_intersect_key($this->table->get_db_format(), $or_data);
+
+        // do not execute query if no arguments given
+        if(empty($format_and) && empty($format_or)){
+            return false;
+        }
+
+        // sort by keys
+        ksort($format_and);
+        ksort($format_or);
+
+        // extract corresponding values
+        $and_values = array_intersect_key($data, $this->table->get_db_format());
+        $or_values = array_intersect_key($or_data, $this->table->get_db_format());
+
+        ksort($and_values);
+        ksort($or_values);
+
+        // build sql string
+        $sql_where = '';
+        $sql_array = array();
+
+        if($format_and){
+            // form sql by merging key and formats
+            if($relation == 'and'){
+                $sql_array[] = urldecode(http_build_query($format_and,'',' AND '));
+            }else{
+                $sql_array[] = urldecode(http_build_query($format_and,'',' OR '));
+            }
+        }
+
+        // $or data always contains array of more than one value
+        foreach($or_data as $col_name=>$values){
+
+            $format = $format_or[$col_name];
+            $or = $col_name.' = '.$format;
+            // repeat OR condition for same key = format
+            $sql_array[] = $col_name.' IN ('.$format.str_repeat(','.$format, count($values)-1).')';
+        }
+
+        // form string
+        $sql_where = implode(' '.$relation.' ', $sql_array);
+
+        // merge values
+        $and_values = array_values($and_values);
+        if(!empty($or_values)){
+            // collapse array or values
+            $or_values = call_user_func_array('array_merge', $or_values);
+        }
+
+        return array('sql' =>$sql_where, 'values'=>array_merge($and_values, $or_values));
+
+    }
+
+    protected function sql_and_or(array $fields_and, $fields_or = array()){
+
+        $where_and = $this->prepare_sql_where($fields_and, 'AND');
+        $where_or = $this->prepare_sql_where($fields_or, 'OR');
+
+        if(!$where_and && !$where_or){
+            throw new \Exception('Invalid search data.');
+        }
+
+        $sql = array();
+        $values = array();
+
+        if($where_and){
+            $sql[] = '('.$where_and['sql'].')';
+            $values = array_merge($values, $where_and['values']);
+        }
+        if($where_or){
+            $sql[] = '('.$where_or['sql'].')';
+            $values = array_merge($values, $where_or['values']);
+        }
+
+        $sql = implode(' AND ', $sql);
+
+        return array('sql'=>$sql, 'values', $values);
 
     }
 

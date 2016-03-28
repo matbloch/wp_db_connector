@@ -27,5 +27,6 @@ $test = new \wpdbc\WPDBCTest();
 //$test->test_direct_manipulation();
 //$test->test_validation();
 //$test->test_sanitation();
+$test->test_multi_obj_handler();
 
-//die();
+die();

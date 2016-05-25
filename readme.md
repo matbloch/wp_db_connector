@@ -9,7 +9,7 @@
 - define table abstraction classes
 - ...profit
 
-# Upcomming Features
+# Upcoming Features
 - Generate static DBTable class from constructor
 - Extend Validator inline by static validation and sanitation methods
 - DBTable as singleton
@@ -99,8 +99,10 @@ class TestTable extends DBTable{
 - *Escaping* done by $wpdb (string or numeric entry) and by the class **Validator** (trim etc.)
 - *Validation* done by **Validator** class
 - rules separated by `|`
+- Don't use `|`, ` ` in parameters
 
-
+**Examples**
+`rule1:context1:context2|rule2:context2 param1 param2|rule3 param1`
 
 **Available validation rules:**
 

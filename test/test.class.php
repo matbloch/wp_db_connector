@@ -38,7 +38,7 @@ class TestTable extends DBTable{
     protected function define_validation_rules(){
         return array(
             'id_nummer' => 'integer|required:insert',
-            'code' => 'starts,#',
+            'code' => 'starts #',
             'name' => 'required:insert',
             'vorname' => 'required:insert',
             'age' => 'integer'
@@ -250,6 +250,7 @@ class WPDBCTest{
 
         // item handler
 		$item = new TestItem();
+        //$item->debugging(true);
 
 		// insert item
 		$result = $item->insert(array(
@@ -272,26 +273,36 @@ class WPDBCTest{
             'name'=>'Warhole',
             'vorname'=>'Martin',
             'age'=> 15,
+            'code'=>'#19994',
+            'id_nummer' => 3567835
         ));
         $result = $item->insert(array(
             'name'=>'Warhole',
             'vorname'=>'Andy',
             'age'=> 45,
+            'code'=>'#92389',
+            'id_nummer' => 02345256
         ));
         $result = $item->insert(array(
             'name'=>'Bowie',
             'vorname'=>'David',
             'age'=> 45,
+            'code'=>'#993asd',
+            'id_nummer' => 4175634
         ));
         $result = $item->insert(array(
             'name'=>'Warhole',
             'vorname'=>'Alex',
             'age'=> 11,
+            'code'=>'#2904AC',
+            'id_nummer' => 2893833
         ));
         $result = $item->insert(array(
             'name'=>'Warhole',
             'vorname'=>'Jason',
             'age'=> 87,
+            'code'=>'#8481dA',
+            'id_nummer' => 7738923
         ));
 		
 	}
@@ -420,7 +431,6 @@ class WPDBCTest{
 
         echo '<strong>Testitem exits:</strong> '.($result?'YES':'NO').'<br>';
 
-		
 	}
 
     /* STATUS: TESTED */
@@ -511,21 +521,21 @@ class WPDBCTest{
 	}
 	
 	public function test_sanitation(){
-		
+
 	}
 
-    /* multi-object handler */
+    /* STATUS: PENDING */
     public function test_multi_obj_handler(){
 
         $this->add_dummy_data();
-
         $h = new MultiObjectHandler();
-        $h->debugging(true);
 
-        // load multiple objects
+
+        // load from db
         $h->load(
             array(
-                'name'=>array('Warhole', 'Bowie'),
+                'name'=>array('      Warhole    ', 'Bowie'),
+                //'name'=>array('Warhole', 'Bowie'),
             ),
            array(
                //'name'=>array('Warhole', 'Bowie', 'Muster'),
@@ -535,11 +545,10 @@ class WPDBCTest{
                'limit' => 5,
                'group_by' => 'name'
            )
-
         );
 
+        // display results
         $familiy_members = $h->get_objects();
-
         foreach($familiy_members as $f=>$m){
             echo '<strong>Family '.$f.'</strong><br>';
             foreach($m as $i){
@@ -547,13 +556,25 @@ class WPDBCTest{
             }
         }
 
-        $h->delete(
+        $h->debugging(true);
+
+        /*
+        // update - unique key pairs
+        $h->update_queried_items(
             array(
-                'vorname' => array('David', 'Alex', 'Jason'),
-                'name' => 'Warhole'
+                'name'=>'Warhole_updated',
+                'vorname'=>'Bill',      // illegal: unique key pair
             )
         );
+        */
 
+        // delete
+        $h->delete(
+            array(
+                //'vorname' => array('David', 'Alex', 'Jason'),
+                'code' => '#84w81dA'
+            )
+        );
 
 
     }

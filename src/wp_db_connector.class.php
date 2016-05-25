@@ -9,8 +9,6 @@
 
 namespace wpdbc;  // db connector
 
-
-
 /**
  * Class Utils
  * @package wpdbc
@@ -187,7 +185,7 @@ abstract class Utils{
                 </td>
                 <td>
                     <?php
-                    if($data['result']){
+                    if(isset($data['result'])){
                         print_r($data['result']);
                     }else{
                         print_r($wpdb->last_result);
@@ -371,12 +369,13 @@ abstract class DBObjectInterface extends Utils{
      * @return mixed row as object or false if entry does not exist
      * @throws \Exception if multiple entries with unique values exist
      */
+    // TODO: refactor to cheaper method for existence check usecases (use count, drop values)
     public function exists(array $data){
 
         // sanitation
         $data = $this->table->validator->sanitize($data, 'get');
 
-        // validation
+        // validation - also necessary in this context (user feedback)
         $result = $this->table->validator->validate('get', $data);
         if($result === false){
             if($this->debug){
@@ -401,6 +400,7 @@ abstract class DBObjectInterface extends Utils{
         }
 
         if(empty($results)){
+            // database error - no value found
             return false;
         }elseif(count($results) == 1){
             return $results[0];
@@ -764,11 +764,10 @@ abstract class DBObjectsHandler extends Utils{
     private $objects;      // the loaded objects
 
     // identifiers for the currently queried objects
-    private $sql_where;
-    private $group_by; // column name used to group $objects
+    private $sql_where; // current escaped sql WHERE qualifier
+    private $group_by;  // column name used to group $objects
     private $limit;
     private $offset;
-
 
     /**
      * @return string Class name of extended DBTable Database Table class
@@ -824,6 +823,12 @@ abstract class DBObjectsHandler extends Utils{
         return !empty($this->sql_where);
     }
 
+    public function queried(){
+        if(empty($this->sql_where)){
+            throw new \Exception('No query has been performed yet. Method operates on queried objects.');
+        }
+    }
+
     /**
      * Load objects specified by search data
      * @param array $fields_and column values with 'AND' relation.
@@ -831,15 +836,33 @@ abstract class DBObjectsHandler extends Utils{
      * @param array $fields_or column values with 'OR' relation.
      *              Format: array('col1'=>'searchval1', 'col2'=>array('col2_val1', 'col2_val1'))
      * @param array $args (optional) additional query pagination parameters: limit, offset, group_by
-     * @return bool|int false if query failed or number of search results (including 0)
+     * @return bool|int false if query failed (check validation) or number of search results (including 0)
      * @throws \Exception if invalid search data supplied
      */
+    // TESTED
     public function load(
         array $fields_and,
         array $fields_or = array(),
         $args = array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
         ){
 
+        // sanitation
+        $fields_and = $this->table->validator->sanitize($fields_and, 'get');
+        $fields_or = $this->table->validator->sanitize($fields_or, 'get');
+
+        // validation - also necessary in this context (user feedback)
+        $result = $this->table->validator->validate('get', $fields_and);
+        if($result === true){
+            $result = $this->table->validator->validate('get', $fields_or);
+        }
+        if($result === false){
+            if($this->debug){
+                $this->debug('validation');
+            }
+            return false;
+        }
+
+        // build sql query
         $where_and = $this->prepare_sql_where($fields_and, 'AND');
         $where_or = $this->prepare_sql_where($fields_or, 'OR');
 
@@ -850,7 +873,6 @@ abstract class DBObjectsHandler extends Utils{
         $sql_where = array();
         $sql_attr = '';
         $values = array();
-        $values_attr = array();
 
         if($where_and){
             $sql_where[] = '('.$where_and['sql'].')';
@@ -909,12 +931,17 @@ abstract class DBObjectsHandler extends Utils{
         return false;
     }
 
+    // TODO: complete. Reload objects based on current query
+    public function reload(){
+        $this->queried();
+    }
 
     /**
      * Loads all table entries into the object
      * @param array $args (optional) additional query pagination parameters: limit, offset, group_by
      * @return bool|int false if query failed or number of search results (including 0)
      */
+    // TESTED
     public function load_all(
         $args = array('limit'=>-1, 'offset'=>0, 'group_by'=>null)
     ){
@@ -970,41 +997,35 @@ abstract class DBObjectsHandler extends Utils{
      * @return bool|integer false on fail, or number of affected rows (including 0)
      * @throws \Exception if invalid search fields or no search terms and no previous search
      */
+    // TODO: untested
     public function delete($fields_and = array(), $fields_or = array()){
 
+        // sanitation
+        $fields_and = $this->table->validator->sanitize($fields_and, 'get');
+        $fields_or = $this->table->validator->sanitize($fields_or, 'get');
+
+        // validation
+        $result = $this->table->validator->validate('get', $fields_and);
+        if($result === true){
+            $result = $this->table->validator->validate('get', $fields_or);
+        }
+        if($result === false){
+            if($this->debug){
+                $this->debug('validation');
+            }
+            return false;
+        }
+
+        // build query
+        $values = array();
         if($fields_and || $fields_or){
-            $where_and = $this->prepare_sql_where($fields_and, 'AND');
-            $where_or = $this->prepare_sql_where($fields_or, 'OR');
-
-            if(!$where_and && !$where_or){
-                throw new \Exception('Invalid search data.');
-            }
-
-            $sql_where = array();
-            $values = array();
-
-            if($where_and){
-                $sql_where[] = '('.$where_and['sql'].')';
-                $values = array_merge($values, $where_and['values']);
-            }
-            if($where_or){
-                $sql_where[] = '('.$where_or['sql'].')';
-                $values = array_merge($values, $where_or['values']);
-            }
-
-            $sql_where = implode(' AND ', $sql_where);
-
+            $query = $this->sql_and_or($fields_and, $fields_or);
+            $sql_where = $query['sql'];
+            $values = $query['values'];
         }else{
-            if(!$this->is_loaded()){
-                if($this->is_queried()){
-                    // queried 0 results
-                    return 0;
-                }else{
-                    $this->loaded();
-                }
-            }
-
-            // delete currently selected objects
+            // delete currently queried objects
+            $this->queried();
+            // take currently selected objects
             $sql_where = $this->sql_where;
         }
 
@@ -1018,37 +1039,48 @@ abstract class DBObjectsHandler extends Utils{
             $sql = $wpdb->prepare($sql, $values);
         }
 
-        $result = $wpdb->get_results($sql);
+        // perform query
+        $success = $wpdb->query($sql);
 
         if($this->debug){
-            $this->debug('query', array('result'=>$result));
+            $this->debug('query', array('result'=>$success));
         }
 
-        if($result !== NULL){
-            $this->objects = array();
-            $this->sql_where = '';
-            $this->limit = '';
-            $this->offset = 0;
-            return $result;
+        // unset properties to ensure no further manipulations
+        if($success === 1){
+            if($result !== NULL){
+                $this->objects = array();
+                $this->sql_where = '';
+                $this->limit = '';
+                $this->offset = 0;
+                return $result;
+            }
         }
 
-        return false;
+        $result = $this->execute_bound_actions('delete_after', $values, $success);
+        if($result === false){
+            return false;
+        }
+
+        return $success;
     }
 
+    /**
+     * @return int number of entries in table
+     */
     public function count_all(){
 
-        //todo: finish
-    /*
-        SELECT
-          category,
-          COUNT(*) AS `num`
-        FROM
-          posts
-        GROUP BY
-          category
+        global $wpdb;
 
-        */
+        // perform query
+        $sql = "SELECT COUNT(1) as nr FROM ".$this->table->get_db_table_name();
+        $result = $wpdb->get_results($sql);
 
+        if($result){
+            return $result[0]->nr;
+        }
+
+        return 0;
     }
 
     public function count(
@@ -1093,10 +1125,63 @@ abstract class DBObjectsHandler extends Utils{
     }
 
     /**
+     * @param array $update format: array('colname1'=>'newvalue1', 'colname2'=>'newvalue2')
+     * @param array $where_and
+     * @param array $where_or
+     */
+    // TODO: untested
+    public function update_queried_items(array $update, $where_and = array(), $where_or = array()){
+
+        // must be queried to use this function
+        $this->queried();
+
+        // update
+        $update_format = array_intersect_key($this->table->get_db_format(), $update);
+        $update_values = array_intersect_key($update, $this->table->get_db_format());
+
+        if(empty($update_format)){
+            throw new \Exception('Invalid update format.');
+        }
+
+        global $wpdb;
+
+        // build format and escape
+        $sql_update = urldecode(http_build_query($update_format,'',', '));
+        $sql_update = $wpdb->prepare($sql_update, $update_values);
+
+        // where
+        $query_extension = array();
+        if($where_and || $where_or){
+            $query_extension = $this->sql_and_or($where_and, $where_or);    // throws exception if empty
+        }
+        $sql_where_escaped = $this->sql_where;
+        if($query_extension){
+            // escape
+            $sql_where_escaped = $sql_where_escaped.' AND '.$wpdb->prepare($query_extension['sql'], $query_extension['values']);
+        }
+
+        // combine query
+        $sql = "UPDATE ".$this->table->get_db_table_name()." SET ".$sql_update." WHERE ".$sql_where_escaped;
+
+        // perform update
+        $result = $wpdb->get_results($sql);
+
+        if($this->debug){
+            $this->debug('query', array('result'=>$result));
+        }
+    }
+
+    /**
      * If objects are loaded: update selected group
      * Else: update all entries in db that match the criteria
+     * @param array $update
+     * @param array $where_and
+     * @param array $where_or
+     * @return bool|int
+     * @throws \Exception
      */
-    public function multi_update(array $update, $where_and = array(), $where_or = array()){
+    // TODO: untested
+    public function update(array $update, $where_and = array(), $where_or = array()){
 
         // prepare update values
 
@@ -1143,9 +1228,9 @@ abstract class DBObjectsHandler extends Utils{
 
     }
 
-    /** get the columns values for a key
-     * @param $key
-     * @return array
+    /** get values for a specific column
+     * @param $key string column name
+     * @return array column values
      */
     public function get_col($key){
         return array_map(function($o) use ($key){
@@ -1153,6 +1238,10 @@ abstract class DBObjectsHandler extends Utils{
         }, $this->objects);
     }
 
+    /**
+     * @param null $key optional grouping by a column name
+     * @return array objects
+     */
     public function get_objects($key = null){
 
         if($key != null){
@@ -1163,12 +1252,13 @@ abstract class DBObjectsHandler extends Utils{
 
     }
 
-    public function edit($data){
-        // todo: include additional where condition
-
-
-    }
-
+    // TODO: direct grouping in SQL-Query
+    /**
+     * @param $key string column name
+     * @param array $data
+     * @return array
+     * @throws \Exception if key has invalid format
+     */
     protected function group($key, array $data){
         $d = array();
 
@@ -1180,10 +1270,16 @@ abstract class DBObjectsHandler extends Utils{
             if(isset($entry->{$key})){
                 $d[$entry->{$key}][] = $entry;
             }
-
         }
 
         return $d;
+    }
+
+    // TODO: include additional where condition
+    public function edit($data){
+
+
+
     }
 
     /**
@@ -1280,6 +1376,15 @@ abstract class DBObjectsHandler extends Utils{
 
     }
 
+    /**
+     * Builds a SQL Query analog to 'prepare_sql_where' but with 'and' & 'or' fields combined (AND)
+     * @param array $fields_and array format: array('col1'=>'val1', 'col2'=>array('or_val1', 'or_val2'))
+     *                          output: (col1=val1 AND col2 in (or_val1, or_val2))
+     * @param array $fields_or  array format: array('col1'=>'val1', 'col2'=>array('or_val1', 'or_val2'))
+     *                          output: (col1=val1 OR col2 in (or_val1, or_val2))
+     * @return array array('sql'=>string SQL query with format specifiers, 'values'=>array corresponding values)
+     * @throws \Exception   invalid query fields
+     */
     protected function sql_and_or(array $fields_and, $fields_or = array()){
 
         $where_and = $this->prepare_sql_where($fields_and, 'AND');
@@ -1303,7 +1408,7 @@ abstract class DBObjectsHandler extends Utils{
 
         $sql = implode(' AND ', $sql);
 
-        return array('sql'=>$sql, 'values', $values);
+        return array('sql'=>$sql, 'values'=>$values);
 
     }
 
@@ -1318,7 +1423,7 @@ endif;  // include guard
 if (!class_exists('\wpdbc\Validator')):
 class Validator{
 
-    // todo: move to object instance and build singleton DBTable
+    // todo: move to object instance and build singleton
     protected $errors;   // collects validation errors temporarily
 
     /*
@@ -1357,6 +1462,16 @@ class Validator{
         return $this->errors;
     }
 
+    protected function add_error($field_name, $context, $value, $rule, $param){
+        $this->errors[] = array(
+            'field' => $field_name,
+            'context' => $context,
+            'value' => $value,
+            'rule' => $rule,
+            'param' => $param,
+        );
+    }
+
     public function sanitize(array $data, $context = null){
 
         if(empty($this->sanitation_rules)){
@@ -1364,31 +1479,50 @@ class Validator{
         }
 
         foreach($data as $field_name => $value){
-
+            // do sanitation if a rule is defined for the column name
             if(array_key_exists($field_name, $this->sanitation_rules)){
-                foreach($this->sanitation_rules[$field_name] as $rule){
+                // check all rules for this field
+                foreach($this->sanitation_rules[$field_name] as $rule_str){
 
                     $method = null;
-                    $sanitation_context = null;
-                    $param = null;
+                    $param_str = null;
+                    $context_arr = null;
+                    $rule = null;
+                    $rule_parts = array();
 
-                    // parse rule for contexts and parameters
-                    if (strstr($rule, ',') !== false) {
-                        $rule   = explode(',', $rule);
-                        $rule   = $rule[0];
-                        $param  = $rule[1];
-                        if (strstr($rule, ':') !== false) {
-                            $rule   = $rule[0];
-                            $sanitation_context  = $rule[1];
-                        }
+                    // TODO: replace rule param delimiter to allow "|" and " " in options
+
+                    // extract parameters
+                    $rule_parts = explode(' ',$rule_str, 2);
+                    if($rule_parts){
+                        // parameters present
+                        $param_str = $rule_parts[1];
+                        $rule_str = $rule_parts[0];
+                    }
+
+                    $rule_parts = explode(':', $rule_str);
+                    // contexts present
+                    if($rule_parts){
+                        $rule = array_shift($rule_parts);   // remove first element = rule
+                        $context_arr = $rule_parts;
+                    }else{
+                        $rule = $rule_str;
                     }
 
                     $method = 'sanitize_'.$rule;
-                    if($sanitation_context == null || in_array($context, explode(';', $sanitation_context))){
+
+                    // perform sanitation if its in the right context
+                    if($context_arr == null || in_array($context, $context_arr)){
                         // predefined sanitation rules
                         if (is_callable(array($this, $method))) {
-                            if(isset($data[$field_name])){
-                                $this->$method($field_name, $context, $data, $param);
+                            // sanitize
+                            if(is_array($value)){
+                                // multiple values at once
+                                foreach($value as $k=>$single_val){
+                                    $this->$method($k, $context, $data[$field_name], $param_str);
+                                }
+                            }else{
+                                $this->$method($field_name, $context, $data, $param_str);
                             }
                         } else {
                             throw new \Exception("Validator sanitation method '$method' does not exist.");
@@ -1413,53 +1547,71 @@ class Validator{
 
         foreach($data as $field_name => $value){
             if(array_key_exists($field_name, $this->validation_rules)){
-                foreach($this->validation_rules[$field_name] as $rule){
+                foreach($this->validation_rules[$field_name] as $rule_str){
 
                     $valid = true;
                     $method = null;
-                    $rule_context = null;
-                    $param = null;
+                    $param_str = null;
+                    $context_arr = null;
+                    $rule = null;
+                    $rule_parts = array();
 
-                    // parse parameters
-                    if (strstr($rule, ',') !== false) {
-                        $rule   = explode(',', $rule);
-                        $rule   = $rule[0];
-                        $param  = $rule[1];
+                    // TODO: replace rule param delimiter to allow "|" and " " in options
+
+                    // extract parameters
+                    $rule_parts = explode(' ',$rule_str, 2);
+                    if($rule_parts){
+                        // parameters present
+                        $param_str = $rule_parts[1];
+                        $rule_str = $rule_parts[0];
                     }
-                    // parse context
-                    if (strstr($rule, ':') !== false) {
-                        $rule   = explode(':', $rule);
-                        $rule = $rule[0];
-                        $rule_context  = $rule[1];
+
+                    $rule_parts = explode(':', $rule_str);
+                    // contexts present
+                    if($rule_parts){
+                        $rule = array_shift($rule_parts);   // remove first element = rule
+                        $context_arr = $rule_parts;
+                    }else{
+                        $rule = $rule_str;
                     }
 
                     $method = 'validate_'.$rule;
 
                     // predefined rules - check if in correct context
-                    if($rule_context == null || in_array($context, explode(';', $rule_context))){
+                    if($context_arr == null || in_array($context, $context_arr)){
                         if (is_callable(array($this, $method))) {
-                            $valid = $this->$method($field_name, $context, $data, $param);
-                        // inline rule definition
+
+                            // sanitize
+                            if(is_array($value)){
+                                // multiple values at once
+                                foreach($value as $k=>$single_val){
+                                    $valid = $this->$method($k, $context, $data[$field_name], $param_str);
+                                    if(!$valid){
+                                        $this->add_error($field_name.'['.$k.']', $context, $data[$field_name], $rule, $param_str);
+                                    }
+                                }
+                            }else{
+
+                                $valid = $this->$method($field_name, $context, $data, $param_str);
+
+                                if(!$valid){
+                                    $this->add_error($field_name, $context, $value, $rule, $param_str);
+                                }
+                            }
+                        // user defined rules
                         } elseif(isset(self::$validation_methods[$rule])) {
-                            $valid = call_user_func(self::$validation_methods[$rule], $field_name, $context, $data, $param);
+                            $valid = call_user_func(self::$validation_methods[$rule], $field_name, $context, $data, $param_str);
+                            if(!$valid){
+                                $this->add_error($field_name, $context, $value, $rule, $param_str);
+                            }
                         } else {
                             throw new \Exception("Validator method '$method' does not exist.");
                         }
                     }
-
-                    // save validation error
-                    if(!$valid){
-                        $this->errors[] = array(
-                            'field' => $field_name,
-                            'context' => $context,
-                            'value' => $value,
-                            'rule' => $rule,
-                            'param' => $param,
-                        );
-                    }
-
                 }
             }
+
+            // TODO: user defined validation rules
         }
 
         if(empty($this->errors)){
@@ -1472,13 +1624,13 @@ class Validator{
     /* sanitation functions */
     private function sanitize_exclude_keys($field, $context, &$data, $param = null){
         if($param != null && is_array($data[$field])){
-            $keys_to_remove = array_flip(explode(';', $param));
+            $keys_to_remove = array_flip(explode(' ', $param));
             $data[$field] = array_diff_key($data[$field], $keys_to_remove);
         }
     }
     private function sanitize_exclude_values($field, $context, &$data, $param = null){
         if($param != null && is_array($data[$field])){
-            $data[$field] = array_diff($data[$field], explode(';', $param));
+            $data[$field] = array_diff($data[$field], explode(' ', $param));
         }
     }
     private function sanitize_exclude($field, $context, &$data, $param = null){
@@ -1499,7 +1651,7 @@ class Validator{
         if(!isset($data[$field]))
             return true;
         if($param != null){
-            if(in_array($data[$field], explode(';', $param))){
+            if(in_array($data[$field], explode(' ', $param))){
                 return false;
             }
         }
@@ -1595,9 +1747,8 @@ class Validator{
     private function validate_starts($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return true;
-
-        foreach(explode(';', $param) as $start){
-            if(strpos($data[$field], $start) == 0){
+        foreach(explode(' ', $param) as $start){
+            if(strpos($data[$field], $start) === 0){
                 return true;
             }
         }
@@ -1606,7 +1757,7 @@ class Validator{
     private function validate_ends($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return true;
-        foreach(explode(';', $param) as $end){
+        foreach(explode(' ', $param) as $end){
             if(strlen($data[$field]) - strlen($end) == strrpos($data[$field],$end)){
                 return true;
             }
@@ -1621,7 +1772,7 @@ class Validator{
     private function validate_contains($field, $context, $data, $param = null){
         if(!isset($data[$field]))
             return true;
-        if(in_array($data[$field], explode(';', $param))){
+        if(in_array($data[$field], explode(' ', $param))){
             return true;
         }
         return false;
@@ -1637,7 +1788,6 @@ endif;  // include guard
 if (!class_exists('\wpdbc\DBTableSingleton')):
 abstract class DBTableSingleton
 {
-
 
     /**
      * @var DBTable The reference to *Singleton* instance of this class
@@ -1660,7 +1810,6 @@ abstract class DBTableSingleton
 
         return self::$instances[$calledClass];
     }
-
 
     /**
      * Private clone method to prevent cloning of the instance of the
@@ -1698,7 +1847,6 @@ abstract class DBTable extends DBTableSingleton{
         $db_table->get_db_table_name();
      */
 
-
     /**
      * Protected constructor to prevent creating a new instance of the
      * *Singleton* via the `new` operator from outside of this class.
@@ -1717,7 +1865,6 @@ abstract class DBTable extends DBTableSingleton{
         // validation and sanitation
         $this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
     }
-
 
     protected $db_table_name;   // holds the db values of the object
     protected $db_primary_key;
@@ -1804,4 +1951,3 @@ abstract class DBTable extends DBTableSingleton{
 endif;  // include guard
 
 ?>
-        

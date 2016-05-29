@@ -558,21 +558,22 @@ class WPDBCTest{
 
         $h->debugging(true);
 
-        /*
-        // update - unique key pairs
-        $h->update_queried_items(
+        // update
+        $h->update(
             array(
-                'name'=>'Warhole_updated',
-                'vorname'=>'Bill',      // illegal: unique key pair
-            )
+                'name'=>'name_updated',
+                //'vorname'=>'Bill',      // illegal: unique key pair
+            ),
+            true
         );
-        */
 
         // delete
         $h->delete(
+            false,
+            array(),
             array(
-                //'vorname' => array('David', 'Alex', 'Jason'),
-                'code' => '#84w81dA'
+                'vorname' => array('David', 'Alex', 'Jason'),
+                'name' => 'name_updated'
             )
         );
 

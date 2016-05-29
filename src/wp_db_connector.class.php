@@ -994,20 +994,26 @@ abstract class DBObjectsHandler extends Utils{
     /**
      * @param array $fields_and
      * @param array $fields_or
-     * @return bool|integer false on fail, or number of affected rows (including 0)
+     * @return bool|integer false on fail, or number of deleted entries (including 0)
      * @throws \Exception if invalid search fields or no search terms and no previous search
      */
-    // TODO: untested
-    public function delete($fields_and = array(), $fields_or = array()){
+    // TESTED
+    public function delete($continue_query = false, $fields_and = array(), $fields_or = array()){
 
         // sanitation
-        $fields_and = $this->table->validator->sanitize($fields_and, 'get');
-        $fields_or = $this->table->validator->sanitize($fields_or, 'get');
+        $fields_and = $this->table->validator->sanitize($fields_and, 'delete');
+        $fields_or = $this->table->validator->sanitize($fields_or, 'delete');
+
+        // data binding
+        $result = $this->execute_bound_actions('delete_before', $continue_query, array('where_and'=>$fields_and, 'where_or'=>$fields_or));
+        if($result === false){
+            return false;
+        }
 
         // validation
-        $result = $this->table->validator->validate('get', $fields_and);
+        $result = $this->table->validator->validate('delete', $fields_and);
         if($result === true){
-            $result = $this->table->validator->validate('get', $fields_or);
+            $result = $this->table->validator->validate('delete', $fields_or);
         }
         if($result === false){
             if($this->debug){
@@ -1018,15 +1024,25 @@ abstract class DBObjectsHandler extends Utils{
 
         // build query
         $values = array();
-        if($fields_and || $fields_or){
-            $query = $this->sql_and_or($fields_and, $fields_or);
-            $sql_where = $query['sql'];
-            $values = $query['values'];
-        }else{
+        $sql_where = '';
+
+        if($continue_query){
             // delete currently queried objects
             $this->queried();
             // take currently selected objects
-            $sql_where = $this->sql_where;
+            $sql_where .= $this->sql_where;
+        }
+
+        if($fields_and || $fields_or){
+            $query = $this->sql_and_or($fields_and, $fields_or);
+            if($continue_query){
+                $sql_where .= ' AND ';
+            }
+            $sql_where .= $query['sql'];
+            $values = $query['values'];
+        }elseif(!$continue_query){
+            // no search values given
+            throw new \Exception("No search query given.");
         }
 
         global $wpdb;
@@ -1044,17 +1060,6 @@ abstract class DBObjectsHandler extends Utils{
 
         if($this->debug){
             $this->debug('query', array('result'=>$success));
-        }
-
-        // unset properties to ensure no further manipulations
-        if($success === 1){
-            if($result !== NULL){
-                $this->objects = array();
-                $this->sql_where = '';
-                $this->limit = '';
-                $this->offset = 0;
-                return $result;
-            }
         }
 
         $result = $this->execute_bound_actions('delete_after', $values, $success);
@@ -1125,53 +1130,6 @@ abstract class DBObjectsHandler extends Utils{
     }
 
     /**
-     * @param array $update format: array('colname1'=>'newvalue1', 'colname2'=>'newvalue2')
-     * @param array $where_and
-     * @param array $where_or
-     */
-    // TODO: untested
-    public function update_queried_items(array $update, $where_and = array(), $where_or = array()){
-
-        // must be queried to use this function
-        $this->queried();
-
-        // update
-        $update_format = array_intersect_key($this->table->get_db_format(), $update);
-        $update_values = array_intersect_key($update, $this->table->get_db_format());
-
-        if(empty($update_format)){
-            throw new \Exception('Invalid update format.');
-        }
-
-        global $wpdb;
-
-        // build format and escape
-        $sql_update = urldecode(http_build_query($update_format,'',', '));
-        $sql_update = $wpdb->prepare($sql_update, $update_values);
-
-        // where
-        $query_extension = array();
-        if($where_and || $where_or){
-            $query_extension = $this->sql_and_or($where_and, $where_or);    // throws exception if empty
-        }
-        $sql_where_escaped = $this->sql_where;
-        if($query_extension){
-            // escape
-            $sql_where_escaped = $sql_where_escaped.' AND '.$wpdb->prepare($query_extension['sql'], $query_extension['values']);
-        }
-
-        // combine query
-        $sql = "UPDATE ".$this->table->get_db_table_name()." SET ".$sql_update." WHERE ".$sql_where_escaped;
-
-        // perform update
-        $result = $wpdb->get_results($sql);
-
-        if($this->debug){
-            $this->debug('query', array('result'=>$result));
-        }
-    }
-
-    /**
      * If objects are loaded: update selected group
      * Else: update all entries in db that match the criteria
      * @param array $update
@@ -1180,45 +1138,99 @@ abstract class DBObjectsHandler extends Utils{
      * @return bool|int
      * @throws \Exception
      */
-    // TODO: untested
-    public function update(array $update, $where_and = array(), $where_or = array()){
+    // TESTED
+    public function update(array $update, $continue_query = false, $where_and = array(), $where_or = array()){
 
-        // prepare update values
-
+        // extract update values
         $update_values = array_intersect_key($update, $this->table->get_db_format());
         $update_format = array_intersect_key($this->table->get_db_format(), $update);
+
+        // sanitation
+        $update = $this->table->validator->sanitize($update, 'update');
+        $where_and = $this->table->validator->sanitize($where_and, 'update');
+        $where_or = $this->table->validator->sanitize($where_or, 'update');
+
+        // data binding
+        $result = $this->execute_bound_actions('update_before', $update, array('where_and'=>$where_and, 'where_or'=>$where_or));
+        if($result === false){
+            return false;
+        }
+
+        // validation - also necessary in this context (user feedback)
+        $result = $this->table->validator->validate('update', $update);
+        if($result === true){
+            $result = $this->table->validator->validate('update', $where_and);
+        }
+        if($result === true){
+            $result = $this->table->validator->validate('update', $where_or);
+        }
+        if($result === false){
+            if($this->debug){
+                $this->debug('validation');
+            }
+            return false;
+        }
 
         if(empty($update_values)){
             throw new \Exception('Nothing to update.');
         }
 
+        // check update values for unique values
+        if($this->contains_unique_fields($update_values)){
+            throw new \Exception('Illegal update: updating unique values on multiple objects.');
+        }
+
         // build sql
         $sql_update = urldecode(http_build_query($update_format,'',', '));
+        $where_values = array();
+        $sql_where = '';
+
+        if($continue_query){
+            // delete currently queried objects
+            $this->queried();
+            // take currently selected objects
+            $sql_where .= $this->sql_where;
+        }
 
         // prepare where
         if($where_and || $where_or){
-            $where = $this->sql_and_or($where_and, $where_or);
-            $where_sql = $where['sql'];
-            $where_values = $where['values'];
-        }else{
-            if(!$this->is_loaded()){
-                if($this->is_queried()){
-                    // queried 0 results
-                    return 0;
-                }else{
-                    $this->loaded();
-                }
+            $query = $this->sql_and_or($where_and, $where_or);
+            if($continue_query){
+                $sql_where .= ' AND ';
             }
-            $where_sql = $this->sql_where;
-            $where_values = $this->where_values;
+            $sql_where .= $query['sql'];
+            $where_values = $query['values'];
+        }elseif(!$continue_query){
+            // no search values given
+            throw new \Exception("No search query given.");
         }
 
         global $wpdb;
-        $sql = "UPDATE $this->table->get_db_table_name() SET $sql_update WHERE $where_sql";
+        $sql = "UPDATE ".$this->table->get_db_table_name()." SET $sql_update WHERE $sql_where";
 
         // escape if values are present
-        $sql = $wpdb->prepare($sql, array_merge(array_values($update_values), $where_values));
+        if($where_values){
+            $sql = $wpdb->prepare($sql, array_merge(array_values($update_values), $where_values));
+        }else{
+            $sql = $wpdb->prepare($sql, $update_values);
+        }
+
+        // perform update
         $result = $wpdb->get_results($sql);
+
+        if($this->debug){
+            $this->debug('query', array('result'=>$result));
+        }
+
+        // update current representation
+        if($where_values){
+            // $this->reload()
+        }
+
+        $bound_result =  $this->execute_bound_actions('update_after', $update_values, $result);
+        if($bound_result === false){
+            return false;
+        }
 
         if($result !== NULL){
             return $result;
@@ -1226,6 +1238,28 @@ abstract class DBObjectsHandler extends Utils{
 
         return false;
 
+    }
+
+    private function contains_unique_fields(array $data){
+
+        $unique_data = array_intersect_key($data, array_flip($this->table->get_unique_keys()));
+
+        // unique columns
+        if(!empty(array_intersect_key($data, array_flip($this->table->get_unique_keys())))){
+            return true;
+        }
+
+        // unique column pairs
+        if($this->table->get_unique_key_pairs()) {
+            foreach ($this->table->get_unique_key_pairs() as $i => $pair) {
+                $inters = array_intersect_key($data, array_flip($pair));
+                if (count($pair) == count($inters)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /** get values for a specific column

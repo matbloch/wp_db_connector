@@ -839,7 +839,6 @@ abstract class DBObjectsHandler extends Utils{
      * @return bool|int false if query failed (check validation) or number of search results (including 0)
      * @throws \Exception if invalid search data supplied
      */
-    // TESTED
     public function load(
         array $fields_and,
         array $fields_or = array(),
@@ -861,6 +860,15 @@ abstract class DBObjectsHandler extends Utils{
             }
             return false;
         }
+
+        // data binding
+        $ref_data = array('where_and'=>$fields_and, 'where_or'=>$fields_or);
+        $result = $this->execute_bound_actions('get_before', $continue_query, $ref_data, $args);
+        if($result === false){
+            return false;
+        }
+        $fields_and = $ref_data['where_and'];
+        $fields_or = $ref_data['where_or'];
 
         // build sql query
         $where_and = $this->prepare_sql_where($fields_and, 'AND');

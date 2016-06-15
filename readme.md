@@ -237,6 +237,8 @@ class File extends DBObjectInterface{
 
 The arguments passed to the bounded functions **are always sanitized and validated yet not filtered** to the available columns (allows to pass aditional parameters to the bounded functions).
 
+**Hooked function**: `myfunction(array $data, $args = null)`
+
 | Hook | description | arguments |
 |-|-|-|
 |`delete_before`|Before an item is deleted|**array** $where (optional)|
@@ -246,8 +248,29 @@ The arguments passed to the bounded functions **are always sanitized and validat
 |`update_before`|Before an item is deleted|**array** $data, **array** $where|
 |`update_after`|Before an item is deleted|**array** $where|
 
+**Multi-Object Handler**
+
+| Hook | description | arguments |
+|-|-|-|
+|`get_before`|Before items are loaded|**array** $where (optional)|
+|`delete_before`|Before an item is deleted|**array** $where (optional)|
+|`delete_after`|After an item is deleted|**array** $where (optional), **bool** $success|
+|`insert_before`|Before an item is deleted|**array** $data|
+|`insert_after`|Before an item is deleted|**array** $data, **bool** $success|
+|`update_before`|Before an item is deleted|**array** $data, **array** $where|
+|`update_after`|Before an item is deleted|**array** $where|
+
+####Changing Data with hooked functions
 
 
+```php
+
+function myFunction($data, $args = null){
+
+	return $data;
+}
+
+```
 
 ### 2.3 Interface Methods
 

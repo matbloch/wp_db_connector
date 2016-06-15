@@ -577,6 +577,7 @@ class WPDBCTest{
             )
         );
 
+        $h->count_all();
 
     }
 }

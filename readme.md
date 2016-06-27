@@ -168,7 +168,7 @@ class TestItem extends DBObjectInterface{
 
 	protected function define_db_table(){
 		// instance of the table class
-        return new TestTable();
+        return 'TestTable';
     }
 
     protected function define_data_binding(){

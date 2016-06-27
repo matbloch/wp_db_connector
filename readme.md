@@ -113,7 +113,7 @@ class TestTable extends DBTable{
 - `ban` ban a key or multiple values
 - `required` required key
 - `numeric`
-- `int`
+- `integer`
 - `float`
 - `alpha_numeric`
 - `alpha_space`(a-z, A-Z, 0-9, \s)

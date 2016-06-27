@@ -1,4 +1,6 @@
 # Wordpress Database Connector
+# License
+Wordpress Database Connector may not be used without the authors permission.
 
 # Requirements
 - PHP 5.3

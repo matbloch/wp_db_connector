@@ -2,9 +2,10 @@
 
 /**
  * @author      Matthias Bloch (https://github.com/matbloch)
- * @copyright   Copyright (c) 2016
- *
+ * @copyright   Copyright (c) 2016 - All Rights Reserved
  * @version     1.0
+ * Unauthorized copying of this file, via any medium is strictly prohibited
+ * Proprietary and confidential
  */
 
 namespace wpdbc;  // db connector

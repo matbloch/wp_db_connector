@@ -1477,6 +1477,14 @@ class Validator{
      * )
      */
     protected $validation_rules;            // define the validation rules
+    /*
+     * structure:
+     * array(
+     *  'colname1' => array('rule1'=>'error msg 1', 'rule2'=>'error msg 2'),
+     *  'colname1' => array('rule1'=>'error msg 1', 'rule2'=>'error msg 2')
+     * )
+     */
+    protected $validation_error_msgs;       // user defined validation error messages
     public static $validation_methods;      // todo: not yet implemented
     /*
      * structure:
@@ -1488,7 +1496,7 @@ class Validator{
     protected $sanitation_rules;            // define sanitation rules
     public static $sanitation_methods;      // todo: not yet implemented
 
-    public function __construct(array $validation_rules = array(), array $sanitation_rules = array())
+    public function __construct(array $validation_rules = array(), array $sanitation_rules = array(), array $validation_error_msgs = array())
     {
         // copy validation rules
         foreach($validation_rules as $field_name => $rules){
@@ -1499,11 +1507,17 @@ class Validator{
         foreach($sanitation_rules as $field_name => $rules){
             $this->sanitation_rules[$field_name] = explode('|', $rules);
         }
+
+        // copy validation error feedback messages
+        if(!empty($validation_error_msgs)){
+            $this->validation_error_msgs = $validation_error_msgs;
+        }
     }
 
     public function get_errors(){
         return $this->errors;
     }
+
 
     protected function add_error($field_name, $context, $value, $rule, $param){
         $this->errors[] = array(
@@ -1701,7 +1715,14 @@ class Validator{
         return !isset($data[$field]);
     }
     private function validate_required($field, $context, $data, $param = null){
-        return isset($data[$field]);
+        if(!isset($data[$field])){
+            return false;
+        }
+        if(is_array($data[$field])){
+            return !empty($data[$field]);
+        }else{
+            return ($data[$field] !== "");
+        }
     }
     private function validate_numeric($field, $context, $data, $param = null){
         if(!isset($data[$field]))
@@ -1820,6 +1841,13 @@ class Validator{
         }
         return false;
     }
+
+    private function get_std_validation_error_msgs(){
+        $messages = array(
+            'required' => 'Dieses Feld ist ein Pflichtfeld.'
+        );
+        return $messages;
+    }
 }
 endif;  // include guard
 
@@ -1913,7 +1941,7 @@ abstract class DBTable extends DBTableSingleton{
     protected $db_primary_key;
     protected $db_format;      // defines the value format for $wpdb escaping
 
-    // todo: move to objectHandler
+    // todo: maybe move to objectHandler?
     public $validator;          // validator object
 
     /*
@@ -1937,7 +1965,6 @@ abstract class DBTable extends DBTableSingleton{
     abstract protected function define_db_format();
 
     /* placeholder functions */
-
     /** Unique field values: crucial for insert/update
      * @return array(array())
      */
@@ -1950,12 +1977,21 @@ abstract class DBTable extends DBTableSingleton{
     protected function define_unique_keys(){
         return null;
     }
-
     /**
      * Defines the validation rules
      * @return array format: array('column_name'=>'rules')
      */
     protected function define_validation_rules(){
+        return array();
+    }
+    /**
+     * @return array format:
+     * array(
+     *      'col1'=>array('rule1'=>'message1', 'rule2'=>'message2'),
+     *      'col2'=>array('rule1'=>'message1', 'rule2'=>'message2')
+     *      )
+     */
+    protected function define_validation_error_messages(){
         return array();
     }
     /**

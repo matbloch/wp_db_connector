@@ -111,7 +111,7 @@ class TestTable extends DBTable{
 `rule:context1;context2,param1;param2`
 
 - `ban` ban a key or multiple values
-- `required` required key
+- `required` check if key is set and if array: `!empty` or single value `!==""` (0 validates to true)
 - `numeric`
 - `integer`
 - `float`

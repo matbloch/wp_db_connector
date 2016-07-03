@@ -282,70 +282,6 @@ abstract class DBObjectInterface extends Utils{
     }
 
     /**
-     * Generates a SQL query string to find a unique entry. Does not escape, validate or sanitize data
-     * @param array $data associative array with key names equal column names
-     * @return array array[0]: SQL WHERE string, array[1]: values
-     */
-    protected function sql_unique_where(array $data){
-
-        $output = array();
-        $unique_data = array();
-        $pair_data = array();
-
-        // sql data
-        $sql_where = array();
-        $values = array();
-        $sql_string = '';
-
-        // first check for primary key
-        $pk = $this->table->get_db_primary_key();
-        if(isset($data[$pk])){
-            $data_format = $this->table->get_db_format($pk);
-            $sql_where[] = $pk.'='.$data_format;
-            $values = array($data[$pk]);
-        }else{
-
-            // single unique keys
-            if($this->table->get_unique_keys()){
-                $unique_data = array_intersect_key($data, array_flip($this->table->get_unique_keys()));
-
-                $data_format = array_intersect_key($this->table->get_db_format(), $unique_data);
-                ksort($data_format);
-                ksort($unique_data);
-                $sql_where[] = urldecode(http_build_query($data_format,'',' OR '));
-                $values = array_merge($values, array_values($unique_data));
-            }
-
-            // paired unique keys
-            if($this->table->get_unique_key_pairs()){
-                foreach($this->table->get_unique_key_pairs() as $i=>$pair){
-
-                    $inters = array_intersect_key($data, array_flip($pair));
-                    if(count($pair) == count($inters)){
-
-                        // get format
-                        $format = array_intersect_key($this->table->get_db_format(), $inters);
-
-                        ksort($format);
-                        ksort($inters);
-
-                        // build sql: (key1 = %s AND key2 = %d)
-                        $sql_where[] = '('.urldecode(http_build_query($format,'',' AND ')).')';
-
-                        // store values
-                        $values = array_merge($values, array_values($inters));
-                    }
-                }
-            }
-        }
-
-        // build string
-        $sql_string = implode(' OR ', array_filter($sql_where));
-        return array($sql_string, $values);
-
-    }
-
-    /**
      * To check whether object is loaded or not
      * @throws \Exception
      */
@@ -382,6 +318,7 @@ abstract class DBObjectInterface extends Utils{
             if($this->debug){
                 $this->debug('validation');
             }
+            $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
             return false;
         }
 
@@ -499,6 +436,7 @@ abstract class DBObjectInterface extends Utils{
             if($this->debug){
                 $this->debug('validation');
             }
+            $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
             return false;
         }
 
@@ -509,6 +447,7 @@ abstract class DBObjectInterface extends Utils{
                 throw new \Exception("No correct WHERE in UPDATE clause.");
             }
         }
+
         // validation
         if($where !== null){
             $result = $this->table->validator->validate('update_where', $where);
@@ -618,6 +557,7 @@ abstract class DBObjectInterface extends Utils{
                 if($this->debug){
                     $this->debug('validation');
                 }
+                $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
                 return false;
             }
         }
@@ -694,6 +634,7 @@ abstract class DBObjectInterface extends Utils{
             if($this->debug){
                 $this->debug('validation');
             }
+            $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
             return false;
         }
 
@@ -750,6 +691,69 @@ abstract class DBObjectInterface extends Utils{
 
     }
 
+    /**
+     * Generates a SQL query string to find a unique entry. Does not escape, validate or sanitize data
+     * @param array $data associative array with key names equal column names
+     * @return array array[0]: SQL WHERE string, array[1]: values
+     */
+    protected function sql_unique_where(array $data){
+
+        $output = array();
+        $unique_data = array();
+        $pair_data = array();
+
+        // sql data
+        $sql_where = array();
+        $values = array();
+        $sql_string = '';
+
+        // first check for primary key
+        $pk = $this->table->get_db_primary_key();
+        if(isset($data[$pk])){
+            $data_format = $this->table->get_db_format($pk);
+            $sql_where[] = $pk.'='.$data_format;
+            $values = array($data[$pk]);
+        }else{
+
+            // single unique keys
+            if($this->table->get_unique_keys()){
+                $unique_data = array_intersect_key($data, array_flip($this->table->get_unique_keys()));
+
+                $data_format = array_intersect_key($this->table->get_db_format(), $unique_data);
+                ksort($data_format);
+                ksort($unique_data);
+                $sql_where[] = urldecode(http_build_query($data_format,'',' OR '));
+                $values = array_merge($values, array_values($unique_data));
+            }
+
+            // paired unique keys
+            if($this->table->get_unique_key_pairs()){
+                foreach($this->table->get_unique_key_pairs() as $i=>$pair){
+
+                    $inters = array_intersect_key($data, array_flip($pair));
+                    if(count($pair) == count($inters)){
+
+                        // get format
+                        $format = array_intersect_key($this->table->get_db_format(), $inters);
+
+                        ksort($format);
+                        ksort($inters);
+
+                        // build sql: (key1 = %s AND key2 = %d)
+                        $sql_where[] = '('.urldecode(http_build_query($format,'',' AND ')).')';
+
+                        // store values
+                        $values = array_merge($values, array_values($inters));
+                    }
+                }
+            }
+        }
+
+        // build string
+        $sql_string = implode(' OR ', array_filter($sql_where));
+        return array($sql_string, $values);
+
+    }
 }
 endif;  // include guard
 
@@ -859,6 +863,7 @@ abstract class DBObjectsHandler extends Utils{
             if($this->debug){
                 $this->debug('validation');
             }
+            $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
             return false;
         }
 
@@ -1028,6 +1033,7 @@ abstract class DBObjectsHandler extends Utils{
             if($this->debug){
                 $this->debug('validation');
             }
+            $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
             return false;
         }
 
@@ -1177,6 +1183,7 @@ abstract class DBObjectsHandler extends Utils{
             if($this->debug){
                 $this->debug('validation');
             }
+            $this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
             return false;
         }
 
@@ -1514,11 +1521,21 @@ class Validator{
         }
     }
 
+    /**
+     * Get validation errors (debugging format)
+     * @return mixed
+     */
     public function get_errors(){
         return $this->errors;
     }
-
-
+    /**
+     * Add error
+     * @param $field_name
+     * @param $context
+     * @param $value
+     * @param $rule
+     * @param $param
+     */
     protected function add_error($field_name, $context, $value, $rule, $param){
         $this->errors[] = array(
             'field' => $field_name,
@@ -1527,6 +1544,36 @@ class Validator{
             'rule' => $rule,
             'param' => $param,
         );
+    }
+    /**
+     * Get human readable error messages
+     * @return array
+     */
+    public function get_clear_error_msgs(){
+        $msgs = array();
+        foreach($this->errors as $e){
+            $msgs[$e['field']][$e['rule']] = $this->get_validation_error_msg($e['field'], $e['rule'], $e['value']);
+        }
+        return $msgs;
+    }
+    /**
+     * Get single validation error message
+     * @param $col
+     * @param $rule
+     * @param $val
+     * @return mixed|string
+     */
+    private function get_validation_error_msg($col, $rule, $val){
+        $messages = array(
+            'required' => 'Dieses Feld ist ein Pflichtfeld.'
+        );
+        if(isset($this->validation_error_msgs[$col][$rule])){
+            return $this->validation_error_msgs[$col][$rule];
+        } else if($rule && isset($messages[$rule])){
+            return $messages[$rule];
+        }else{
+            return '';
+        }
     }
 
     public function sanitize(array $data, $context = null){
@@ -1842,12 +1889,6 @@ class Validator{
         return false;
     }
 
-    private function get_std_validation_error_msgs(){
-        $messages = array(
-            'required' => 'Dieses Feld ist ein Pflichtfeld.'
-        );
-        return $messages;
-    }
 }
 endif;  // include guard
 

@@ -12,9 +12,9 @@ Wordpress Database Connector may not be used without the authors permission.
 - ...profit
 
 # Upcoming Features
-- Generate static DBTable class from constructor
 - Extend Validator inline by static validation and sanitation methods
-- DBTable as singleton
+- Error messages for standard object handler routine crashes
+- ~~DBTable as singleton~~
 
 # Installation
 
@@ -266,15 +266,29 @@ The arguments passed to the bounded functions **are always sanitized and validat
 
 
 ```php
-
 function myFunction($data, $args = null){
-
+	// do some modifications
+	if($data['count'] > 30){
+		$data['bulk'] = true;
+	}
+	// return the data array
 	return $data;
 }
 
 ```
 
-### 2.3 Interface Methods
+### 2.3 Interface Usage
+
+**Creation**
+
+```php
+$my_handler = new \wpdbc\TestItem();
+
+if(!$my_handler->insert(array('key1'=>'val1'))){
+	var_dump($my_handler->get_emsg());
+}
+
+```
 
 **Available methods**
 - `debugging`(**$active**)

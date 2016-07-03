@@ -15,7 +15,7 @@
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 // Load plugin class files
-require_once( 'src/wp_db_connector.class.php' );
+require_once( 'src/wpdbc.class.php' );
 require_once( 'test/test.class.php' );
 
 $test = new \wpdbc\WPDBCTest();

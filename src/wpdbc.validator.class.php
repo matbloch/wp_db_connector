@@ -109,7 +109,15 @@ class Validator
     private function get_validation_error_msg($col, $rule, $val)
     {
         $messages = array(
-            'required' => 'Dieses Feld ist ein Pflichtfeld.'
+            'required' => 'Dieses Feld ist ein Pflichtfeld.',
+            'ban' => 'Dieses Feld ist nicht erlaubt.',
+            'numeric' => 'Dieses Feld ist keine Zahl.',
+            'float' => 'Dieses Feld ist keine Fliesskomma Zahl.',
+            'alpha_numeric' => 'Dieses Feld muss einen alphanumerischen Wert haben.',
+            'boolean' => 'Dieses Feld muss einen boolean Wert haben.',
+            'url' => 'Dieses Feld ist keine gültige URL.',
+            'email' => 'Dieses Feld ist keine gültige Email-Adresse.',
+            'date' => 'Dieses Feld ist kein gültiges Datum.'
         );
         if (isset($this->validation_error_msgs[$col][$rule])) {
             return $this->validation_error_msgs[$col][$rule];
@@ -143,7 +151,7 @@ class Validator
 
                     // extract parameters
                     $rule_parts = explode(' ', $rule_str, 2);
-                    if ($rule_parts) {
+                    if (count($rule_parts) == 2) {
                         // parameters present
                         $param_str = $rule_parts[1];
                         $rule_str = $rule_parts[0];
@@ -151,7 +159,7 @@ class Validator
 
                     $rule_parts = explode(':', $rule_str);
                     // contexts present
-                    if ($rule_parts) {
+                    if (count($rule_parts) == 2) {
                         $rule = array_shift($rule_parts);   // remove first element = rule
                         $context_arr = $rule_parts;
                     } else {
@@ -210,7 +218,7 @@ class Validator
 
                     // extract parameters
                     $rule_parts = explode(' ', $rule_str, 2);
-                    if ($rule_parts) {
+                    if (count($rule_parts) == 2) {
                         // parameters present
                         $param_str = $rule_parts[1];
                         $rule_str = $rule_parts[0];
@@ -218,7 +226,7 @@ class Validator
 
                     $rule_parts = explode(':', $rule_str);
                     // contexts present
-                    if ($rule_parts) {
+                    if (count($rule_parts) == 2) {
                         $rule = array_shift($rule_parts);   // remove first element = rule
                         $context_arr = $rule_parts;
                     } else {

@@ -90,7 +90,7 @@ if (!class_exists('\wpdbc\DBTable')):
 		protected $db_primary_key;
 		protected $db_format;      // defines the value format for $wpdb escaping
 
-		// todo: maybe move to objectHandler?
+		// todo: maybe move to objectHandler? No: validation applies directly to database structure
 		public $validator;          // validator object
 
 		/*
@@ -148,6 +148,21 @@ if (!class_exists('\wpdbc\DBTable')):
 		 * @return array format: array('column_name'=>'rules')
 		 */
 		protected function define_sanitation_rules(){
+			return array();
+		}
+		/**
+		 * User defined validation rules
+		 * @return array format:
+		 * array(
+		 * 		'not_this_value' => function($field, $context, &$data, $param = null){
+		 *			if(!isset($data[$field])){return true;}
+		 * 			if($data[$field] == 'test'){
+		 * 			}
+		 * 		}
+		 *
+		 * )
+		 */
+		protected function extend_validation_rules(){
 			return array();
 		}
 

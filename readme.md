@@ -13,7 +13,8 @@ Wordpress Database Connector may not be used without the authors permission.
 
 # Upcoming Features
 - Extend Validator inline by static validation and sanitation methods
-- Error messages for standard object handler routine crashes
+- Support of multiple unique key in table creation
+- ~~Error messages for standard object handler routine crashes~~
 - ~~DBTable as singleton~~
 
 # Installation

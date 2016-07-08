@@ -389,15 +389,13 @@ class WPDBCTest{
 
         // update non existing
         $item->delete();
-        $result = $item->update($update);
+        $result = $item->update($update, $testdata);
         echo 'update non existing: '.var_export($result, true).'<br>';
 
         // validation error
         $update['age'] = 'asdf';
-        $result = $item->update($update);
+        $result = $item->update($update, $testdata);
         echo 'validation error: '.var_export($result, true).'<br>';
-
-        //var_dump($item->get_error_msgs());
 
         // ---- DELETE
         $item->insert($testdata);

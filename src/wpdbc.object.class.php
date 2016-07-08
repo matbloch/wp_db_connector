@@ -79,6 +79,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 		 * @param array $data associative array with key names equal column names
 		 * @return array/false false: no unique data, array[0]: SQL WHERE string, array[1]: values
 		 */
+		// TODO: only use single unique constraint instead of all
 		protected function sql_unique_where(array $data){
 
 			$output = array();
@@ -144,57 +145,6 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 			$sql_string = implode(' AND ', array_filter($sql_where));
 			return array($sql_string, $values);
 
-		}
-
-		/**
-		 * Check if entry exists. Either by single unique key+value or by unique key-pair
-		 * @param array $data unique identification data
-		 * @return mixed row as object or false if entry does not exist
-		 * @throws \Exception if multiple entries with unique values exist
-		 */
-		// TODO: refactor to cheaper method for existence check use cases (use count, drop values)
-		public function exists_old(array $data, $force_unique_data = true){
-
-			// sanitation
-			$data = $this->table->validator->sanitize($data, 'exists');
-
-			// validation - also necessary in this context (user feedback)
-			$result = $this->table->validator->validate('exists', $data);
-			if($result === false){
-				if($this->debug){
-					$this->debug('validation');
-				}
-				$this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
-				return false;
-			}
-
-			// where
-			$where = $this->sql_unique_where($data);
-
-			if(!$where = $this->sql_unique_where($data)){
-				if($force_unique_data){
-					throw new \Exception('No unique search values given.');
-				}else{
-					return false;
-				}
-			}
-
-			global $wpdb;
-			$sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$where[0], $where[1]);
-			$results = $wpdb->get_results( $sql );
-
-			if($this->debug){
-				$this->debug('query');
-			}
-
-			if(empty($results)){
-				// database error - no value found
-				return false;
-			}elseif(count($results) == 1){
-				return $results[0];
-			}else{
-				throw new \Exception('Database has multiple unique entries.');
-			}
 		}
 
 		/**
@@ -280,10 +230,10 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 		/**
 		 * Load all information into the object. Only possible for unique key/key-pair information.
 		 * @param array $data unique search data
-		 * @return true: 	object successfully loaded
-		 * 		   0:	 	entry does not exist
-		 * 		   null:	no unique search data
-		 * 		   false:	misc error
+		 * @return mixed 1: 	object successfully loaded
+		 * 		   		 0:	 	entry does not exist
+		 * 		   		 null:	no unique search data
+		 * 		   		 false:	misc error
 		 * @throws	\Exception if multiple unique values exist in the database
 		 */
 		public function load(array $data){
@@ -322,21 +272,23 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 			}elseif(count($results) == 1){
 				$this->properties = (array) $results[0];
 				return true;
-			}else{
+			}elseif(count($results > 1)){
 				throw new \Exception('Database has multiple unique entries.');
 			}
 
+			// misc error
+			return false;
 		}
 
 		/**
 		 * Updates the currently loaded object or an object uniquely specified by $where
 		 * @param array $data update data with format: array($column_name => $value)
 		 * @param array $search_terms (optional) unique identification with format: array($key => $value)
-		 * @return true: 	object successfully loaded
-		 * 		   0:	 	entry does not exist
-		 * 		   null:	no unique search data
-		 * 		   false:	misc error
-		 * @throws	\Exception
+		 * @return mixed 1: 	object successfully updated
+		 * 		   		 0:	 	update same data/entry does not exist
+		 * 		   		 null:	validation error/no unique search data
+		 * 		   		 false:	misc error
+		 * @throws	\Exception if object is not loaded and no search terms are provided
 		 */
 		public function update(array $data, $search_terms = null){
 
@@ -344,8 +296,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 
 			// object must be loaded if no search is available
 			if($search_terms === null && !$this->is_loaded()){
-				$this->add_emsg('update', 'No search data provided.');
-				return null;
+				throw new \Exception('Object is not loaded.');
 			}
 
 			// sanitation
@@ -385,14 +336,9 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 
 			// data binding
 			$result = $this->execute_bound_actions('update_before', $data, $search_terms);
-
-
-
 			if($result === false){
 				return false;
 			}
-
-
 
 			// extract where sql and data
 			if(!$where = $this->sql_unique_where($search_terms)){
@@ -403,9 +349,22 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 
 			// todo: add update values
 
+			// filter update values
+			$data = array_intersect_key($data, $this->table->get_db_format());
+			if(empty($data)){
+				$this->add_emsg('update', 'No valid update data provided.');
+				return null;
+			}
+			$value_format = array_intersect_key($this->table->get_db_format(), $data);
+
+			// build sql: (key1 = %s AND key2 = %d)
+			$sql_update_format = urldecode(http_build_query($value_format,'',', '));
 
 			global $wpdb;
-			$sql = $wpdb->prepare( 'SELECT * FROM '.$this->table->get_db_table_name().' WHERE '.$where[0], $where[1]);
+			// escape values
+			$sql = $wpdb->prepare( 'UPDATE '.$this->table->get_db_table_name().' SET '.$sql_update_format.' WHERE '.$where[0],
+				array_merge($data, $where[1]));
+
 			$success = $wpdb->query( $sql );
 
 			if($this->debug){
@@ -421,20 +380,24 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 			if($success === 1){
 				// update object properties
 				$this->properties = array_merge($this->properties, $data);
+				return 1;
 			} elseif ($success === 0){
-
+				// no rows affected
+				return 0;
 			}
 
 			// misc error
 			return false;
-
 		}
 
 		/**
 		 * Deletes the loaded object or an object uniquely specified by $where
 		 * @param array $where (optional) unique identification with format: array($key => $value)
-		 * @return bool|integer 1 on success, false on fail
-		 * @throws \Exception If $where is invalid or the object is not loaded
+		 * @return mixed 1: 	object successfully deleted
+		 * 		   		 0:	 	entry does not exist
+		 * 		   		 null:	validation error/no unique search data
+		 * 		   		 false:	misc error
+		 * @throws \Exception If $where is invalid and the object is not loaded
 		 */
 		public function delete($where = null){
 
@@ -527,11 +490,12 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 		 * Inserts a new table row
 		 * @param array $data data with format: array('col1'=>'col1val', 'col2'=>'col2val')
 		 * @param bool $force_reload (optional) whether to update the object representation with the inserted values
-		 * @return true: 	success
-		 * 		   0:	 	entry exists already
-		 * 		   null:	validation error/not enough insertion data
-		 * 		   false:	data binding exit/misc error
+		 * @return mixed 1: 	success
+		 * 		   		 0:	 	entry exists already
+		 * 		   		 null:	validation error/not enough insertion data
+		 * 		   		 false:	data binding exit/misc error
 		 */
+		// TODO: insert if not exists in single query
 		public function insert(array $data, $force_reload = true){
 
 			$this->reset_emsg(array('validation', 'insert'));

@@ -29,7 +29,10 @@ class Validator
      * )
      */
     protected $validation_error_msgs;       // user defined validation error messages
-    public static $validation_methods;      // todo: not yet implemented
+    protected $validation_methods;          // user defined validation methods
+    public function add_validation_methods(array $rules){
+        $this->validation_methods = $rules;
+    }
     /*
      * structure:
      * array(
@@ -57,6 +60,8 @@ class Validator
             $this->validation_error_msgs = $validation_error_msgs;
         }
     }
+
+
 
     /**
      * Get validation errors (debugging format)
@@ -234,47 +239,45 @@ class Validator
                         $rule = $rule_str;
                     }
 
-                    $method = 'validate_' . $rule;
+                    $method = $rule;
 
                     // predefined rules - check if in correct context
                     if ($context_arr == null || in_array($context, $context_arr)) {
-                        if (is_callable(array($this, $method))) {
 
-                            // sanitize
-                            if (is_array($value)) {
-                                // multiple values at once
-                                foreach ($value as $k => $single_val) {
-                                    $valid = $this->$method($k, $context, $data[$field_name], $param_str);
-                                    if (!$valid) {
-                                        $this->add_error($field_name . '[' . $k . ']', $context, $data[$field_name], $rule, $param_str);
-                                    }
-                                }
-                            } else {
+                        $fn = null;
+                        if(isset($this->validation_methods[$method])){
+                            $fn = $this->validation_methods[$method];
+                        }else{
+                           $fn = array($this, 'validate_' . $method);
+                        }
 
-                                $valid = $this->$method($field_name, $context, $data, $param_str);
+                        if(!is_callable($fn)){
+                            throw new \Exception("Validator method '$method' does not exist.");
+                        }
 
+
+                        // sanitize
+                        if (is_array($value)) {
+                            // multiple values at once
+                            foreach ($value as $k => $single_val) {
+                                $valid = $fn($k, $context, $data[$field_name], $param_str);
                                 if (!$valid) {
-                                    $this->add_error($field_name, $context, $value, $rule, $param_str);
+                                    $this->add_error($field_name . '[' . $k . ']', $context, $data[$field_name], $rule, $param_str);
                                 }
-                            }
-                            // user defined rules
-                        } elseif (isset(self::$validation_methods[$rule])) {
-                            $valid = call_user_func(self::$validation_methods[$rule], $field_name, $context, $data, $param_str);
-                            if (!$valid) {
-
-
-
-                                $this->add_error($field_name, $context, $value, $rule, $param_str);
                             }
                         } else {
-                            throw new \Exception("Validator method '$method' does not exist.");
+
+                            $valid = $fn($field_name, $context, $data, $param_str);
+
+                            if (!$valid) {
+                                $this->add_error($field_name, $context, $value, $rule, $param_str);
+                            }
                         }
                     }
                 }
             }
 
-            // TODO: user defined validation rules
-        }
+        }   //  /foreach data field
 
         if (empty($this->errors)) {
             return true;

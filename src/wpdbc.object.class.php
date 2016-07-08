@@ -230,7 +230,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 		/**
 		 * Load all information into the object. Only possible for unique key/key-pair information.
 		 * @param array $data unique search data
-		 * @return mixed 1: 	object successfully loaded
+		 * @return mixed true: 	object successfully loaded
 		 * 		   		 0:	 	entry does not exist
 		 * 		   		 null:	no unique search data
 		 * 		   		 false:	misc error
@@ -284,7 +284,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 		 * Updates the currently loaded object or an object uniquely specified by $where
 		 * @param array $data update data with format: array($column_name => $value)
 		 * @param array $search_terms (optional) unique identification with format: array($key => $value)
-		 * @return mixed 1: 	object successfully updated
+		 * @return mixed true: 	object successfully updated
 		 * 		   		 0:	 	update same data/entry does not exist
 		 * 		   		 null:	validation error/no unique search data
 		 * 		   		 false:	misc error
@@ -380,7 +380,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 			if($success === 1){
 				// update object properties
 				$this->properties = array_merge($this->properties, $data);
-				return 1;
+				return true;
 			} elseif ($success === 0){
 				// no rows affected
 				return 0;
@@ -393,7 +393,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 		/**
 		 * Deletes the loaded object or an object uniquely specified by $where
 		 * @param array $where (optional) unique identification with format: array($key => $value)
-		 * @return mixed 1: 	object successfully deleted
+		 * @return mixed true: 	object successfully deleted
 		 * 		   		 0:	 	entry does not exist
 		 * 		   		 null:	validation error/no unique search data
 		 * 		   		 false:	misc error
@@ -475,7 +475,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 			// unset properties to ensure no further manipulations
 			if($success === 1){
 				$this->properties = array();
-				return 1;
+				return true;
 			} elseif ($success === 0){
 				// entry does not exist
 				return 0;
@@ -483,14 +483,13 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 
 			// misc error
 			return false;
-
 		}
 
 		/**
 		 * Inserts a new table row
 		 * @param array $data data with format: array('col1'=>'col1val', 'col2'=>'col2val')
 		 * @param bool $force_reload (optional) whether to update the object representation with the inserted values
-		 * @return mixed 1: 	success
+		 * @return mixed true: 	success
 		 * 		   		 0:	 	entry exists already
 		 * 		   		 null:	validation error/not enough insertion data
 		 * 		   		 false:	data binding exit/misc error

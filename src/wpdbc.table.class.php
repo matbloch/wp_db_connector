@@ -84,6 +84,7 @@ if (!class_exists('\wpdbc\DBTable')):
 
 			// validation and sanitation
 			$this->validator = new Validator($this->define_validation_rules(), $this->define_sanitation_rules());
+			$this->validator->add_validation_methods($this->extend_validation_rules());
 		}
 
 		protected $db_table_name;   // holds the db values of the object

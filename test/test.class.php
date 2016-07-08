@@ -41,7 +41,7 @@ class TestTable extends DBTable{
             'code' => 'starts #',
             'name' => 'required:insert|name',
             'vorname' => 'required:insert',
-            'age' => 'integer'
+            'age' => 'integer|mature'
         );
     }
     protected function define_sanitation_rules(){
@@ -51,7 +51,18 @@ class TestTable extends DBTable{
             'vorname' => 'trim'
         );
     }
-
+    protected function extend_validation_rules(){
+        return array(
+          'mature'  => function($field, $context, &$data, $param = null){
+              if(!isset($data[$field])){return true;}
+              if($data[$field] < 18){
+                  return false;
+              }else{
+                  return true;
+              }
+          }
+        );
+    }
 }
 
 /* define table */
@@ -325,18 +336,18 @@ class WPDBCTest{
         $testdata = array(
             'name'=>'Mustermann',
             'vorname'=>'Max',
-            'age'=> 35,
+            'age'=> 102,
             'id_nummer' => 2464323);
 
         // ---- INSERT
 
         // insert new
         $result = $item->insert($testdata);
-        echo 'insert new: '.print_r($result, true).'<br>';
+        echo 'insert new: '.var_export($result, true).'<br>';
 
         // insert already existing entry
         $result = $item->insert($testdata);
-        echo 'insert already existing entry: '.print_r($result, true).'<br>';
+        echo 'insert already existing entry: '.var_export($result, true).'<br>';
 
         // cleanup
         $item->delete($testdata);
@@ -358,7 +369,7 @@ class WPDBCTest{
 
         // load
         $result = $item->load($testdata);
-        echo 'load: '.print_r($result, true).'<br>';
+        echo 'load: '.var_export($result, true).'<br>';
 
         // load non existing (always by primary key)
         $item->delete();

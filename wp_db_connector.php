@@ -20,6 +20,7 @@ require_once( 'test/test.class.php' );
 
 $test = new \wpdbc\WPDBCTest();
 
+$test->test_main_function_response();
 //$test->object_memory_usage();
 //$test->add_dummy_data();
 //$test->test_unique_key_item();
@@ -27,6 +28,6 @@ $test = new \wpdbc\WPDBCTest();
 //$test->test_direct_manipulation();
 //$test->test_validation();
 //$test->test_sanitation();
-$test->test_multi_obj_handler();
+//$test->test_multi_obj_handler();
 
-//die();
+die();

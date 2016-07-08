@@ -95,6 +95,7 @@ class Validator
         $msgs = array();
         foreach ($this->errors as $e) {
             $msgs[$e['field']][$e['rule']] = $this->get_validation_error_msg($e['field'], $e['rule'], $e['value']);
+
         }
         return $msgs;
     }
@@ -119,12 +120,13 @@ class Validator
             'email' => 'Dieses Feld ist keine gültige Email-Adresse.',
             'date' => 'Dieses Feld ist kein gültiges Datum.'
         );
+
         if (isset($this->validation_error_msgs[$col][$rule])) {
             return $this->validation_error_msgs[$col][$rule];
         } else if ($rule && isset($messages[$rule])) {
             return $messages[$rule];
         } else {
-            return '';
+            return 'Data has wrong format.';
         }
     }
 
@@ -195,7 +197,6 @@ class Validator
     // white-list validation
     public function validate($context, array $data)
     {
-
         // clear errors
         $this->errors = array();
 
@@ -260,6 +261,9 @@ class Validator
                         } elseif (isset(self::$validation_methods[$rule])) {
                             $valid = call_user_func(self::$validation_methods[$rule], $field_name, $context, $data, $param_str);
                             if (!$valid) {
+
+
+
                                 $this->add_error($field_name, $context, $value, $rule, $param_str);
                             }
                         } else {

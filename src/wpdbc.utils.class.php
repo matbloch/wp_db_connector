@@ -123,14 +123,12 @@ abstract class Utils{
             }
         }
     }
-    public function get_emsg($context = ''){
+    public function get_error_msgs($context = ''){
         if($context == ''){
             $e = $this->errors;
         }else{
             $e = (empty($this->errors[$context])?array():$this->errors[$context]);
         }
-
-        //$this->reset_error_msgs($context);
         return $e;
     }
 

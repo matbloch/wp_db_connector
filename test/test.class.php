@@ -39,7 +39,7 @@ class TestTable extends DBTable{
         return array(
             'id_nummer' => 'integer|required:insert',
             'code' => 'starts #',
-            'name' => 'required:insert',
+            'name' => 'required:insert|name',
             'vorname' => 'required:insert',
             'age' => 'integer'
         );
@@ -315,6 +315,79 @@ class WPDBCTest{
     public function test_identifier_extraction($data, $pairs=false){
         $item = new TestItem();
         var_dump($item->extract_unique_identifier_values($data, $pairs));
+    }
+
+    public function test_main_function_response(){
+
+        $this->start_msg('test_main_function_response()');
+        $item = new TestItem();
+
+        $testdata = array(
+            'name'=>'Mustermann',
+            'vorname'=>'Max',
+            'age'=> 35,
+            'id_nummer' => 2464323);
+
+        // ---- INSERT
+
+        // insert new
+        $result = $item->insert($testdata);
+        echo 'insert new: '.print_r($result, true).'<br>';
+
+        // insert already existing entry
+        $result = $item->insert($testdata);
+        echo 'insert already existing entry: '.print_r($result, true).'<br>';
+
+        // cleanup
+        $item->delete($testdata);
+
+        // insert with validation error (validator)
+        $testdata['age'] = '123a';
+        $result = $item->insert($testdata);
+        echo 'insert with validation error: '.var_export($result, true).'<br>';
+        $item->delete($testdata);
+
+        // ---- LOAD
+
+        $testdata = array(
+            'name'=>'Mustermann',
+            'vorname'=>'Max',
+            'age'=> 35,
+            'id_nummer' => 2464323);
+        $item->insert($testdata);
+
+        // load
+        $result = $item->load($testdata);
+        echo 'load: '.print_r($result, true).'<br>';
+
+        // load non existing (always by primary key)
+        $item->delete();
+        $result = $item->load($testdata);
+        echo 'load non existing: '.var_export($result, true).'<br>';
+
+        // validation error
+        $testdata['name'] = 12341234;
+        $result = $item->load($testdata);
+        echo 'loading with validation error: '.var_export($result, true).'<br>';
+
+        // ---- UPDATE
+        $testdata = array(
+            'name'=>'Mustermann',
+            'vorname'=>'Max',
+            'age'=> 35,
+            'id_nummer' => 2464323);
+        $item->insert($testdata);
+
+        // update
+        $update = array('age' => 1337);
+        $result = $item->update($update);
+        echo 'update: '.var_export($result, true).'<br>';
+
+
+        var_dump($item->get_error_msgs());
+
+        // ---- DELETE
+
     }
 
     /* STATUS: TESTED */

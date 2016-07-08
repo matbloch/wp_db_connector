@@ -262,7 +262,7 @@ The arguments passed to the bounded functions **are always sanitized and validat
 |`update_before`|Before an item is deleted|**array** $data, **array** $where|
 |`update_after`|Before an item is deleted|**array** $where|
 
-####Changing Data with hooked functions
+####Example: Changing Data with hooked functions
 
 
 ```php
@@ -279,18 +279,103 @@ function myFunction($data, $args = null){
 
 ### 2.3 Interface Usage
 
-**Creation**
 
+#### Main Functions
+
+**Return Codes**
+- success: `true`
+- entry exists/does not exist: `0`
+- validation error: `null`
+- misc error: `false`
+
+**Data format**
 ```php
-$my_handler = new \wpdbc\TestItem();
-
-if(!$my_handler->insert(array('key1'=>'val1'))){
-	var_dump($my_handler->get_emsg());
-}
-
+array(
+'col1' => 'value1',
+'col2' => 'value2'
+)
 ```
 
-**Available methods**
+- - -
+
+
+`insert`(array $data, bool $force_reload = true)
+**Optional**: $force_reload if inserted data should be loaded into the object instance (`load`() applied after insert)
+```php
+$handler = new \wpdbc\TestItem();
+if($r = !$handler->insert($data){
+	if($r === 0){
+		// entry exists already
+	} else if($r == null){
+		// validation error
+		var_dump($r->get_error_messages())
+	} else {
+		// misc error
+	}
+}
+```
+
+- - -
+
+
+`load`(array $search_terms)
+**Description**: Loads ++specific++ data entry (no `or` terms)
+```php
+$handler = new \wpdbc\TestItem();
+if($r = !$handler->load($data){
+	if($r === 0){
+		// entry does not exist
+	} else if($r == null){
+		// validation error (e.g. no unique search key)
+		var_dump($r->get_error_messages())
+	} else {
+		// misc error
+	}
+}
+```
+
+- - -
+
+
+`update`(array $data, array $search_terms = null)
+**Description**: Updates ++specific++ data entry (no `or` terms)
+**Optional**: $search_terms if update not applied to object instance
+```php
+$handler = new \wpdbc\TestItem();
+if($r = !$handler->update($data){
+	if($r === 0){
+		// entry does not exist
+	} else if($r == null){
+		// validation error (e.g. no unique search key)
+		var_dump($r->get_error_messages())
+	} else {
+		// misc error
+	}
+}
+```
+
+- - -
+
+
+`delete`(array $search_terms = null)
+**Description**: Deletes ++specific++ data entry (no `or` terms)
+**Optional**: $search_terms if deletion not applied to object instance
+```php
+$handler = new \wpdbc\TestItem();
+if($r = !$handler->update($data){
+	if($r === 0){
+		// entry does not exist
+	} else if($r == null){
+		// validation error (e.g. no unique search key)
+		var_dump($r->get_error_messages())
+	} else {
+		// misc error
+	}
+}
+```
+
+
+#### Available methods (outdated)
 - `debugging`(**$active**)
 	> **@param** bool $active activate/deactivate debugging for object instance
 - `loaded()`
@@ -330,6 +415,10 @@ if(!$my_handler->insert(array('key1'=>'val1'))){
 	> **@param** bool $force_reload (optional) whether to update the object representation with the inserted values
 	> **@return** bool 1 on success, false if entry could not be inserted
 	> **@throws** \Exception if invalid input values are given
+
+Todo:
+- get_error_msgs (validation and context reset after each main function, output format)
+- add_emsg
 
 ## Multi-Object Handler
 

@@ -449,7 +449,8 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 			if($where !== null){
 				$where = $this->table->validator->sanitize($where, 'delete');
 				if(empty($where)){
-					throw new \Exception("No correct WHERE in DELETE clause.");
+					$this->add_emsg('delete', 'Invalid search format.');
+					return null;
 				}
 			}
 
@@ -461,7 +462,7 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 						$this->debug('validation');
 					}
 					$this->add_emsg('validation', $this->table->validator->get_clear_error_msgs());
-					return false;
+					return null;
 				}
 			}
 
@@ -481,14 +482,13 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 
 			// get where format
 			if($where !== null){
-				$extract = $this->sql_unique_where($where);
-				$where_sql = $extract[0];
-				$where_values = $extract[1];
-
-				if(empty($where_sql)){
-					throw new \Exception("Objects can only be deleted from a unique identifier e.g. primary key or unique key pairs");
+				if(!$extract = $this->sql_unique_where($where)){
+					$this->add_emsg('delete', 'Invalid identifier.');
+					return null;
 				}
 
+				$where_sql = $extract[0];
+				$where_values = $extract[1];
 			}else{
 				// delete from instance data
 				$pk = $this->table->get_db_primary_key();
@@ -505,17 +505,21 @@ if (!class_exists('\wpdbc\DBObjectInterface')):
 				$this->debug('query', array('result'=>$success));
 			}
 
-			// unset properties to ensure no further manipulations
-			if($success === 1){
-				$this->properties = array();
-			}
-
 			$result = $this->execute_bound_actions('delete_after', $where, $success);
 			if($result === false){
 				return false;
 			}
+			// unset properties to ensure no further manipulations
+			if($success === 1){
+				$this->properties = array();
+				return 1;
+			} elseif ($success === 0){
+				// entry does not exist
+				return 0;
+			}
 
-			return $success;
+			// misc error
+			return false;
 
 		}
 

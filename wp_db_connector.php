@@ -30,4 +30,4 @@ $test->test_main_function_response();
 //$test->test_sanitation();
 //$test->test_multi_obj_handler();
 
-die();
+//die();

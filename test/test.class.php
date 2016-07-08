@@ -383,10 +383,36 @@ class WPDBCTest{
         $result = $item->update($update);
         echo 'update: '.var_export($result, true).'<br>';
 
+        // update same values
+        $result = $item->update($update);
+        echo 'update same values: '.var_export($result, true).'<br>';
 
-        var_dump($item->get_error_msgs());
+        // update non existing
+        $item->delete();
+        $result = $item->update($update);
+        echo 'update non existing: '.var_export($result, true).'<br>';
+
+        // validation error
+        $update['age'] = 'asdf';
+        $result = $item->update($update);
+        echo 'validation error: '.var_export($result, true).'<br>';
+
+        //var_dump($item->get_error_msgs());
 
         // ---- DELETE
+        $item->insert($testdata);
+
+        // delete
+        $result = $item->delete(array('name'=>'Mustermann', 'vorname'=>'Max'));
+        echo 'delete: '.var_export($result, true).'<br>';
+
+        // delete non existing
+        $result = $item->delete(array('name'=>'Mustermann', 'vorname'=>'Max'));
+        echo 'delete non existing: '.var_export($result, true).'<br>';
+
+        // validation error
+        $result = $item->delete(array('name'=>1234, 'vorname'=>'test'));
+        echo 'validation error: '.var_export($result, true).'<br>';
 
     }
 

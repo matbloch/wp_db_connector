@@ -20,7 +20,7 @@ require_once( 'test/test.class.php' );
 
 $test = new \wpdbc\WPDBCTest();
 
-$test->test_main_function_response();
+//$test->test_main_function_response();
 //$test->object_memory_usage();
 //$test->add_dummy_data();
 //$test->test_unique_key_item();

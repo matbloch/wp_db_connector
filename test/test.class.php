@@ -618,13 +618,21 @@ class WPDBCTest{
         $item = new TestItem();
         $item ->debugging(true);
 
-        // insert new
-        $result = $item->insert(array(
-            'name'=>'Muster',
+
+        // required
+        $data = array(
             'vorname'=>'         Hans',
             'age'=> 22,
             'id_nummer' => '45647435345'
-        ));
+        );
+        $result = $item->insert($data);
+        foreach($item->get_error_msgs()['validation'] as $error){
+            foreach($error as $field=>$rule) {
+                echo '<strong>' . $field . ':</strong> ' . print_r($rule, true).'<br>';
+            }
+        }
+
+
 		
 	}
 	

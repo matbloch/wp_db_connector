@@ -209,9 +209,13 @@ class Validator
             return true;
         }
 
-        foreach ($data as $field_name => $value) {
-            if (array_key_exists($field_name, $this->validation_rules)) {
-                foreach ($this->validation_rules[$field_name] as $rule_str) {
+
+        // loop through all rules
+        foreach ($this->validation_rules as $field_name=>$rules) {
+            // check if rule applies to data
+            if (array_key_exists($field_name, $data)) {
+                // validate to all rules
+                foreach ($rules as $rule_str) {
 
                     $valid = true;
                     $method = null;
@@ -248,18 +252,17 @@ class Validator
                         if(isset($this->validation_methods[$method])){
                             $fn = $this->validation_methods[$method];
                         }else{
-                           $fn = array($this, 'validate_' . $method);
+                            $fn = array($this, 'validate_' . $method);
                         }
 
                         if(!is_callable($fn)){
                             throw new \Exception("Validator method '$method' does not exist.");
                         }
 
-
                         // sanitize
-                        if (is_array($value)) {
+                        if (is_array($data[$field_name])) {
                             // multiple values at once
-                            foreach ($value as $k => $single_val) {
+                            foreach ($data[$field_name] as $k => $single_val) {
                                 $valid = $fn($k, $context, $data[$field_name], $param_str);
                                 if (!$valid) {
                                     $this->add_error($field_name . '[' . $k . ']', $context, $data[$field_name], $rule, $param_str);
@@ -270,14 +273,14 @@ class Validator
                             $valid = $fn($field_name, $context, $data, $param_str);
 
                             if (!$valid) {
-                                $this->add_error($field_name, $context, $value, $rule, $param_str);
+                                $this->add_error($field_name, $context, $data[$field_name], $rule, $param_str);
                             }
                         }
                     }
-                }
+                }   // foreach rule
             }
+        }   // foreach field rules
 
-        }   //  /foreach data field
 
         if (empty($this->errors)) {
             return true;
@@ -325,9 +328,7 @@ class Validator
     /* validation functions */
     private function validate_ban($field, $context, $data, $param = null)
     {
-        if (!isset($data[$field]))
-            return true;
-        if ($param != null) {
+        if ($param !== null) {
             if (in_array($data[$field], explode(' ', $param))) {
                 return false;
             }
@@ -337,13 +338,10 @@ class Validator
 
     private function validate_required($field, $context, $data, $param = null)
     {
-        if (!isset($data[$field])) {
-            return false;
-        }
         if (is_array($data[$field])) {
             return !empty($data[$field]);
         } else {
-            return ($data[$field] !== "");
+            return ($data[$field] !== "" && is_null($data[$field]));
         }
     }
 
